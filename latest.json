@@ -1,0 +1,17 @@
+{
+  "android": {
+    "version": "1.9",
+    "code": 123,
+    "notes": "Essential: Material You, made expressive.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/android/Echo-1.9.apk",
+    "sha256": "c670875acb038d73dd2cceb0dd9b65d3985a85da48904c7008bd112da0f1dbec",
+    "size": 26913674
+  },
+  "windows": {
+    "version": "0.4.4",
+    "notes": "One notification per reaction, typing indicators on macOS 26+, and link previews on iPhones.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/windows/Echo-0.4.4.exe",
+    "sha256": "27e8737db9c7151111bca111678f324cab17ca01efeed939759f2ecf6d8c05c1",
+    "size": 18788864
+  }
+}
