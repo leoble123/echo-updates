@@ -293,6 +293,19 @@ struct FeaturesPane: View {
             .disabled(brain.clipboardOn == nil)
             Text("Passwords copied from a password manager are never sent.").font(.caption).foregroundStyle(.secondary)
         }
+        Card(title: "REMINDERS & NOTES") {
+            ForEach(["Reminders", "Notes"], id: \.self) { name in
+                Row(title: name, value: brain.appsCheck[name] ?? "Not checked", good: brain.appsCheck[name].map { $0.hasPrefix("Working") })
+            }
+            HStack {
+                Button("Check Now") { brain.checkMacApps() }
+                Button("Open Automation Settings…") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
+                }
+            }
+            Text("Your phone reaches Reminders and Notes through Echo Server. If macOS asks whether Echo Server may control them, click Allow; if you clicked Don't Allow, switch them on under Automation → Echo Server.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
         Card(title: "CATCH ME UP (CLAUDE)") {
             if brain.aiConfigured == true {
                 Row(title: "Anthropic API key", value: "Set", good: true)

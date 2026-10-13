@@ -151,6 +151,29 @@ final class Brain: ObservableObject {
         }
     }
 
+    @Published var appsCheck: [String: String] = [:]
+
+    /// Runs Reminders and Notes the way the phone does, and says exactly what happened.
+    func checkMacApps() {
+        appsCheck = ["Reminders": "Checking…", "Notes": "Checking…"]
+        Task {
+            for (name, path) in [("Reminders", "/echo/reminders"), ("Notes", "/echo/notes")] {
+                do {
+                    let r = try await api?.call("GET", path, query: ["fresh": "1"], timeout: 90)
+                    if let d = r as? [String: Any] {
+                        appsCheck[name] = "Working · \((d["reminders"] as? [Any])?.count ?? 0) to do in \((d["lists"] as? [Any])?.count ?? 0) lists"
+                    } else if let a = r as? [Any] {
+                        appsCheck[name] = "Working · \(a.count) notes"
+                    } else {
+                        appsCheck[name] = "Answered with nothing"
+                    }
+                } catch {
+                    appsCheck[name] = "Error: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     func setAIKey(_ key: String) {
         Task {
             do {

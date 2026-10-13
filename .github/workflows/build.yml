@@ -145,7 +145,7 @@ jobs:
           # Live, but only informational: a CI Mac may not let scripts control Notes/Reminders.
           run() {
             local out; out=$(perl -e 'alarm 40; exec @ARGV' osascript -l JavaScript "jxa/$1.js" "$2" 2>&1 | tr '\n' ' ' | cut -c1-400)
-            echo "::notice title=$1::$out" >> jxa-notices.txt
+            printf '%s: %s\n' "$1" "$out" >> "$GITHUB_WORKSPACE/jxa-results.txt"
             printf '%s' "$out"
           }
           echo "--- NOTE_CREATE"; OUT=$(run NOTE_CREATE '{"html":"<div><h1>Echo CI &amp; test</h1></div><div>line &lt;2&gt;</div>"}'); echo "$OUT"
@@ -156,7 +156,7 @@ jobs:
             echo "--- NOTES_LIST"; run NOTES_LIST '{"limit":5}'
           fi
           echo "--- REMINDERS_LIST"; run REMINDERS_LIST '{}'
-          cat jxa-notices.txt 2>/dev/null
+          cat "$GITHUB_WORKSPACE/jxa-results.txt" 2>/dev/null
           true
       - name: Claude SDK runs in Echo Server's own runtime
         run: |
@@ -192,7 +192,8 @@ jobs:
         run: |
           gh release create "${{ steps.pack.outputs.tag }}" "${{ steps.pack.outputs.zip }}" "${{ steps.pack.outputs.zip }}.sha256" \
             "${{ steps.app.outputs.zip }}" "${{ steps.app.outputs.zip }}.sha256" \
-            --target "$GITHUB_SHA" --prerelease --title "Echo Server ${{ steps.pack.outputs.tag }}" --notes "Built from $GITHUB_SHA"
+            --target "$GITHUB_SHA" --prerelease --title "Echo Server ${{ steps.pack.outputs.tag }}" \
+            --notes "$(printf 'Built from %s\n\nReminders/Notes live check on the CI Mac:\n%s\n' "$GITHUB_SHA" "$(cat jxa-results.txt 2>/dev/null || echo none)")"
       - name: Retire known-bad builds
         env:
           GH_TOKEN: ${{ github.token }}
