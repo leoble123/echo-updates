@@ -43,9 +43,9 @@ export class EchoRouter {
     }
 
     static async pushSubscribe(ctx: RouterContext, _: Next) {
-        const { subscription, name } = (ctx.request.body ?? {}) as any;
+        const { subscription, name, muted } = (ctx.request.body ?? {}) as any;
         try {
-            EchoPush.get().subscribe(subscription, name);
+            EchoPush.get().subscribe(subscription, name, muted);
         } catch (ex: any) {
             throw new BadRequest({ error: ex?.message ?? "Bad subscription" });
         }

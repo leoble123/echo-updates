@@ -9,7 +9,12 @@ type Subscription = {
     keys: { p256dh: string; auth: string };
     name?: string;
     addedAt?: number;
+    /** Chats this browser has muted: no push for them. */
+    muted?: string[];
 };
+
+/** Chat guids differ in their service prefix across macOS versions (any;-; vs iMessage;-;). */
+const chatKey = (guid: string) => (guid ?? "").slice((guid ?? "").indexOf(";") + 1);
 
 type Store = {
     vapid: { publicKey: string; privateKey: string };
@@ -62,12 +67,18 @@ export class EchoPush extends Loggable {
         return this.load().vapid.publicKey;
     }
 
-    subscribe(sub: Subscription, name?: string) {
+    subscribe(sub: Subscription, name?: string, muted?: string[]) {
         if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) throw new Error("Not a push subscription");
         if (!/^https:\/\//.test(sub.endpoint)) throw new Error("Push endpoints must be https");
         const store = this.load();
         store.subs = store.subs.filter(s => s.endpoint !== sub.endpoint);
-        store.subs.push({ endpoint: sub.endpoint, keys: sub.keys, name: name?.slice(0, 80), addedAt: Date.now() });
+        store.subs.push({
+            endpoint: sub.endpoint,
+            keys: sub.keys,
+            name: name?.slice(0, 80),
+            addedAt: Date.now(),
+            muted: Array.isArray(muted) ? muted.filter(g => typeof g === "string").slice(0, 500).map(chatKey) : []
+        });
         // A browser that has been reinstalled many times shouldn't grow this for ever.
         store.subs = store.subs.slice(-20);
         this.save();
@@ -88,9 +99,13 @@ export class EchoPush extends Loggable {
     async onMessage(message: any) {
         try {
             if (!message || message.isFromMe) return;
+            // Taking a tapback away isn't news.
+            const assoc = Number(message.associatedMessageType) || 0;
+            if (assoc >= 3000 && assoc < 4000) return;
             const store = this.load();
             if (store.subs.length === 0) return;
             const chat = message.chats?.[0] ?? {};
+            const key = chatKey(chat.guid);
             // Kept small: push services cap payloads at 4 KB. The browser fills in names
             // and photos from its own cache.
             const payload = JSON.stringify({
@@ -106,13 +121,13 @@ export class EchoPush extends Loggable {
                 tapback: message.associatedMessageType || null,
                 at: message.dateCreated ?? Date.now()
             });
-            await this.send(payload);
+            await this.send(payload, sub => !(sub.muted ?? []).includes(key));
         } catch (ex: any) {
             this.log.debug(`Push failed: ${ex?.message ?? String(ex)}`);
         }
     }
 
-    async send(payload: string) {
+    async send(payload: string, wanted: (sub: Subscription) => boolean = () => true) {
         const store = this.load();
         const options = {
             vapidDetails: {
@@ -126,7 +141,7 @@ export class EchoPush extends Loggable {
         };
         const gone: string[] = [];
         await Promise.all(
-            store.subs.map(async sub => {
+            store.subs.filter(wanted).map(async sub => {
                 try {
                     await webpush.sendNotification(sub, payload, options);
                 } catch (ex: any) {
