@@ -7,7 +7,8 @@ import axios, { AxiosResponse } from "axios";
 import { Server } from "@server";
 import { FileSystem } from "@server/fileSystem";
 import * as admin from "firebase-admin";
-import { google, Auth } from "googleapis";
+// Echo: the OAuth client alone, not all of googleapis (~48 MB of heap and 0.7 s at every start).
+import { OAuth2Client } from "google-auth-library";
 import { generateRandomString } from "@server/utils/CryptoUtils";
 import { getObjectAsString, isEmpty, isNotEmpty, waitMs } from "@server/helpers/utils";
 import { ProgressStatus } from "@server/types";
@@ -32,7 +33,7 @@ export class OauthService extends Loggable {
 
     httpOpts: any;
 
-    oauthClient: Auth.OAuth2Client;
+    oauthClient: OAuth2Client;
 
     port = 8641;
 
@@ -64,7 +65,7 @@ export class OauthService extends Loggable {
 
     constructor() {
         super();
-        this.oauthClient = new google.auth.OAuth2(this.clientId, null, this.callbackUrl);
+        this.oauthClient = new OAuth2Client(this.clientId, null, this.callbackUrl);
     }
 
     set packageName(name: string) {
