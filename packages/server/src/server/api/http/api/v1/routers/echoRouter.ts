@@ -2,6 +2,7 @@ import { RouterContext } from "koa-router";
 import { Next } from "koa";
 import { app } from "electron";
 import axios from "axios";
+import os from "os";
 import { Server } from "@server";
 import { EchoGuard } from "@server/services/echoGuard";
 import { EchoPush } from "@server/services/echoPush";
@@ -43,6 +44,15 @@ export class EchoRouter {
                 privateApi: !!Server().privateApi?.helper,
                 pushSubscribers: EchoPush.get().count,
                 typing: EchoTyping.summary(),
+                // For Echo for Mac: what it needs to show and manage.
+                permissions: {
+                    fullDisk: Server().hasDiskAccess,
+                    accessibility: Server().hasAccessibilityAccess
+                },
+                liveClients: (Server().httpService?.socketServer as any)?.engine?.clientsCount ?? 0,
+                address: String(Server().repo.getConfig("server_address") ?? ""),
+                proxy: String(Server().repo.getConfig("proxy_service") ?? ""),
+                macos: os.release(),
                 events: EchoGuard.events.slice(-15)
             }
         }).send();

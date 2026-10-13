@@ -46,6 +46,58 @@ jobs:
           du -h "$OUT"
           echo "zip=$OUT" >> "$GITHUB_OUTPUT"
           echo "tag=server-$VERSION-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Build Echo for Mac
+        id: app
+        run: |
+          cd mac-app
+          swift build -c release --arch arm64
+          BIN=$(swift build -c release --arch arm64 --show-bin-path)/Echo
+          APPDIR="$RUNNER_TEMP/Echo.app"
+          mkdir -p "$APPDIR/Contents/MacOS" "$APPDIR/Contents/Resources"
+          cp "$BIN" "$APPDIR/Contents/MacOS/Echo"
+          # The installer, so Echo can update itself the same way it was installed.
+          curl -fsSL -o "$APPDIR/Contents/Resources/echo-server.sh" \
+            "https://raw.githubusercontent.com/leoble123/echo-updates/main/mac/echo-server.sh"
+          grep -q "install_echo_app" "$APPDIR/Contents/Resources/echo-server.sh" || { echo "::error::published installer doesn't know Echo.app yet"; exit 1; }
+          # Icon from the BlueBubbles-derived artwork already in the repo.
+          ICONSET="$RUNNER_TEMP/AppIcon.iconset"; mkdir -p "$ICONSET"
+          for s in 16 32 128 256 512; do
+            sips -z $s $s ../icons/regular/icon-1024.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+            d=$((s*2)); sips -z $d $d ../icons/regular/icon-1024.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+          done
+          iconutil -c icns "$ICONSET" -o "$APPDIR/Contents/Resources/AppIcon.icns"
+          cat > "$APPDIR/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleIdentifier</key><string>com.echo.app</string>
+            <key>CFBundleName</key><string>Echo</string>
+            <key>CFBundleDisplayName</key><string>Echo</string>
+            <key>CFBundleExecutable</key><string>Echo</string>
+            <key>CFBundleIconFile</key><string>AppIcon</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>1.0.$GITHUB_RUN_NUMBER</string>
+            <key>CFBundleVersion</key><string>$GITHUB_RUN_NUMBER</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>LSUIElement</key><true/>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          EOF
+          sed -i '' 's/^          //' "$APPDIR/Contents/Info.plist"
+          plutil -lint "$APPDIR/Contents/Info.plist"
+          codesign --force --deep -s - "$APPDIR"
+          # It must launch and stay up (no engine is running here, so it shows "not answering").
+          "$APPDIR/Contents/MacOS/Echo" > app.log 2>&1 &
+          APID=$!
+          sleep 12
+          kill -0 $APID || { echo "::error::Echo.app exited at launch"; cat app.log; exit 1; }
+          screencapture -x app.png || true
+          kill $APID
+          OUT="Echo-$GITHUB_RUN_NUMBER.zip"
+          (cd "$RUNNER_TEMP" && ditto -c -k --keepParent Echo.app "$GITHUB_WORKSPACE/$OUT")
+          shasum -a 256 "$GITHUB_WORKSPACE/$OUT" | sed "s#$GITHUB_WORKSPACE/##" > "$GITHUB_WORKSPACE/$OUT.sha256"
+          du -h "$GITHUB_WORKSPACE/$OUT"
+          echo "zip=$OUT" >> "$GITHUB_OUTPUT"
       - name: Smoke test (it must start and stay up)
         run: |
           APP=$(find packages/server/releases -maxdepth 3 -name "*.app" | head -1)
@@ -120,6 +172,8 @@ jobs:
           path: |
             smoke.png
             smoke.log
+            app.png
+            app.log
       - uses: actions/upload-artifact@v4
         with:
           name: echo-server
@@ -129,6 +183,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.pack.outputs.tag }}" "${{ steps.pack.outputs.zip }}" "${{ steps.pack.outputs.zip }}.sha256" \
+            "${{ steps.app.outputs.zip }}" "${{ steps.app.outputs.zip }}.sha256" \
             --target "$GITHUB_SHA" --prerelease --title "Echo Server ${{ steps.pack.outputs.tag }}" --notes "Built from $GITHUB_SHA"
       - name: Retire known-bad builds
         env:
