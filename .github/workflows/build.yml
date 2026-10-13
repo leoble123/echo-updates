@@ -143,7 +143,11 @@ jobs:
             echo "compiles: $f"
           done
           # Live, but only informational: a CI Mac may not let scripts control Notes/Reminders.
-          run() { perl -e 'alarm 40; exec @ARGV' osascript -l JavaScript "jxa/$1.js" "$2" 2>&1 | cut -c1-300; }
+          run() {
+            local out; out=$(perl -e 'alarm 40; exec @ARGV' osascript -l JavaScript "jxa/$1.js" "$2" 2>&1 | tr '\n' ' ' | cut -c1-400)
+            echo "::notice title=$1::$out" >&2
+            printf '%s' "$out"
+          }
           echo "--- NOTE_CREATE"; OUT=$(run NOTE_CREATE '{"html":"<div><h1>Echo CI &amp; test</h1></div><div>line &lt;2&gt;</div>"}'); echo "$OUT"
           ID=$(echo "$OUT" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
           if [ -n "$ID" ]; then
