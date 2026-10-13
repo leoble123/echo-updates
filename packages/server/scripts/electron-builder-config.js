@@ -31,6 +31,8 @@ module.exports = {
         "entitlements": "./scripts/entitlements.mac.plist",
         "entitlementsInherit": "./scripts/entitlements.mac.plist",
         "extendInfo": {
+            // A background engine: no Dock icon. Echo for Mac is the app you see.
+            "LSUIElement": true,
             "NSContactsUsageDescription": "Echo Server shows your contacts' names and photos in the Echo apps",
             "NSAppleEventsUsageDescription": "Echo Server uses AppleScript to send messages and keep Messages running",
             "NSSystemAdministrationUsageDescription": "Echo Server needs this to keep your Mac awake and restart itself",

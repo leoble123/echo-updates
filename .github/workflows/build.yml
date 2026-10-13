@@ -23,8 +23,6 @@ jobs:
           node-version: "20.11"
       - name: Install
         run: npm install --no-audit --no-fund
-      - name: Build the settings UI
-        run: npm run build-ui
       - name: Build the server
         working-directory: packages/server
         run: npm run build
@@ -49,8 +47,13 @@ jobs:
       - name: Build Echo for Mac
         id: app
         run: |
+          set -o pipefail
+          trap 'echo "::error::Echo for Mac step failed at: $BASH_COMMAND"' ERR
           cd mac-app
-          swift build -c release --arch arm64
+          if ! swift build -c release --arch arm64 2>&1 | tee swift.log; then
+            grep -E "error:" swift.log | head -10 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
           BIN=$(swift build -c release --arch arm64 --show-bin-path)/Echo
           APPDIR="$RUNNER_TEMP/Echo.app"
           mkdir -p "$APPDIR/Contents/MacOS" "$APPDIR/Contents/Resources"

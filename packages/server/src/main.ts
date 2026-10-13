@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import "@server/env";
 
-import { app, nativeTheme } from "electron";
+import { app, shell } from "electron";
 import process from "process";
 import fs from "fs";
 import path from "path";
@@ -11,8 +11,6 @@ import { ParseArguments } from "@server/helpers/argParser";
 
 import { Server } from "@server";
 import { isEmpty, safeTrim } from "@server/helpers/utils";
-import { AppWindow } from "@windows/AppWindow";
-import { AppTray } from "@trays/AppTray";
 import { getLogger } from "@server/lib/logging/Loggable";
 
 app.commandLine.appendSwitch("in-process-gpu");
@@ -49,21 +47,9 @@ if (!gotTheLock) {
     // Opening the app again (Finder, Spotlight). Show the window if one exists,
     // otherwise build one only when NOT headless - a background server must not
     // pop its settings window open because of a stray re-launch or activation.
-    app.on("second-instance", (_, __, ___) => {
-        const win = Server().window;
-        if (win && !win.isDestroyed()) {
-            if (win.isMinimized()) win.restore();
-            win.show();
-            win.focus();
-            app.focus({ steal: true });
-            return;
-        }
-        const headless = (Server().repo?.getConfig("headless") as boolean) ?? false;
-        if (!headless && Server().repo) {
-            AppWindow.getInstance().setArguments(parsedArgs).build(true);
-            app.focus({ steal: true });
-        }
-    });
+    // Echo: the engine has no windows of its own - Echo for Mac is its face.
+    // Opening the engine again (Finder, Spotlight) brings that up instead.
+    app.on("second-instance", () => openEchoApp());
 
     // Start the Server() when the app is ready
     app.whenReady().then(() => {
@@ -93,30 +79,19 @@ const handleExit = async (event: any = null, { exit = true } = {}) => {
     }
 };
 
-const createApp = () => {
-    AppWindow.getInstance().setArguments(parsedArgs).build();
-    AppTray.getInstance().setArguments(parsedArgs).setExitHandler(handleExit).build();
-};
-
-Server().on("update-available", _ => {
-    AppTray.getInstance().build();
-});
+/** Echo for Mac, if it's installed - the engine's own UI is gone. */
+function openEchoApp() {
+    const echo = "/Applications/Echo.app";
+    if (fs.existsSync(echo)) shell.openPath(echo);
+}
 
 Server().on("ready", () => {
-    createApp();
+    // A background service: no Dock icon, no tray, no window.
+    app.dock?.hide();
+    log.info("Engine ready (no windows - Echo for Mac is the app you see)");
 });
 
-app.on("ready", () => {
-    nativeTheme.on("updated", () => {
-        AppTray.getInstance().build();
-    });
-});
-
-app.on("activate", () => {
-    if (Server().window == null && Server().repo) {
-        AppWindow.getInstance().build();
-    }
-});
+app.on("activate", () => openEchoApp());
 
 app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
