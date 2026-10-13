@@ -30,6 +30,8 @@ export class TransactionPromise {
 
     isResolved = false;
 
+    createdAt = Date.now();
+
     errored = false;
 
     error: any;

@@ -5,6 +5,10 @@ export class OutgoingMessageManager {
     promises: MessagePromise[] = [];
 
     add(promise: MessagePromise) {
+        // Echo: settled sends used to be kept forever, so the list grew with every
+        // message ever sent. Keep the last ten minutes of them for late matches.
+        const cutoff = Date.now() - 10 * 60_000;
+        this.promises = this.promises.filter(p => !p.isResolved || p.sentAt > cutoff);
         this.promises.push(promise);
     }
 

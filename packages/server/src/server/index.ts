@@ -71,6 +71,8 @@ import { MessagePoller } from "./databases/imessage/pollers/MessagePoller";
 import { obfuscatedHandle } from "./utils/StringUtils";
 import { AutoStartMethods } from "./databases/server/constants";
 import { MacOsInterface } from "./api/interfaces/macosInterface";
+import { EchoGuard } from "./services/echoGuard";
+import { applyEchoDefaults, underLaunchd } from "./services/echoGuard/defaults";
 
 const findProcess = require("find-process");
 
@@ -134,6 +136,8 @@ class BlueBubblesServer extends EventEmitter {
     caffeinate: CaffeinateService;
 
     updater: UpdateService;
+
+    echoGuard: EchoGuard;
 
     scheduledMessages: ScheduledMessagesService;
 
@@ -230,6 +234,7 @@ class BlueBubblesServer extends EventEmitter {
         this.queue = null;
         this.proxyServices = [];
         this.updater = null;
+        this.echoGuard = null;
         this.messageManager = null;
         this.webhookService = null;
         this.scheduledMessages = null;
@@ -394,6 +399,9 @@ class BlueBubblesServer extends EventEmitter {
         this.logger.info("Initializing server database...");
         this.repo = new ServerRepository();
         await this.repo.initialize();
+
+        // Echo: lean defaults, written before anything reads them or listens for changes.
+        await applyEchoDefaults(this.repo);
 
         // Handle when something in the config changes
         this.repo.on("config-update", (args: ServerConfigChange) => this.handleConfigUpdate(args));
@@ -563,6 +571,8 @@ class BlueBubblesServer extends EventEmitter {
         this.isStopping = true;
         this.logger.info("Stopping services...");
 
+        this.echoGuard?.stop();
+
         try {
             FCMService.stop();
         } catch (ex: any) {
@@ -665,22 +675,10 @@ class BlueBubblesServer extends EventEmitter {
         // Let everyone know the setup is complete
         this.emit("setup-complete");
 
-        // After setup is complete, start the update checker
-        try {
-            // Wait 5 seconds before starting the update checker.
-            // This is just to not use up too much CPU on startup
-            await waitMs(5000);
-            this.logger.info("Initializing Update Service..");
-            this.updater = new UpdateService(this.window);
-
-            const check = Server().repo.getConfig("check_for_updates") as boolean;
-            if (check) {
-                this.updater?.start();
-                this.updater?.checkForUpdate();
-            }
-        } catch (ex: any) {
-            this.logger.error("There was a problem initializing the update service.");
-        }
+        // Echo: BlueBubbles' own updater is off for good (it would install BlueBubbles over Echo).
+        // Echo Guard takes its place, keeping the server, Messages and the disk healthy.
+        this.echoGuard = new EchoGuard();
+        this.echoGuard.start();
     }
 
     /**
@@ -776,10 +774,7 @@ class BlueBubblesServer extends EventEmitter {
         // Set the dock icon according to the config
         this.setDockIcon();
 
-        const noGpu = Server().repo.getConfig("disable_gpu") ?? false;
-        if (noGpu && !this.args["disable-gpu"]) {
-            this.relaunch();
-        }
+        // Echo: the GPU is switched off in main.ts for every launch, so there's no relaunch here.
 
         // Start minimized if enabled
         const startMinimized = Server().repo.getConfig("start_minimized") as boolean;
@@ -1662,6 +1657,13 @@ class BlueBubblesServer extends EventEmitter {
 
         // Close everything gracefully
         await this.stopAll();
+
+        // Echo: when launchd runs us, exit with a failure code and let it start us again,
+        // so the new process stays under its KeepAlive watch.
+        if (underLaunchd()) {
+            app.exit(75);
+            return;
+        }
 
         // Relaunch the process
         let args = this.buildRelaunchArgs();

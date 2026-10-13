@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { ECHO_AGENT } from "@server/services/echoGuard/defaults";
 import * as path from "path";
 import * as os from "os";
 import * as child_process from "child_process";
@@ -33,8 +34,8 @@ import { uuidv4 } from "@firebase/util";
 const FindProcess = require("find-process");
 const { rimrafSync } = require("rimraf");
 
-// Patch in original user data directory
-app.setPath("userData", app.getPath("userData").replace("@bluebubbles/server", "bluebubbles-server"));
+// Echo: always BlueBubbles' data folder, whatever this app is called, so settings carry over.
+app.setPath("userData", path.join(app.getPath("appData"), "bluebubbles-server"));
 
 // Directory modifiers based on the environment
 let subdir = "";
@@ -566,7 +567,7 @@ export class FileSystem {
                 `defaults read ~/Library/Preferences/com.apple.universalaccessAuthWarning.plist`
             )) ?? ""
         ).trim();
-        return res.includes('BlueBubbles.app" = 1') || res.includes('BlueBubbles" = 1');
+        return ["BlueBubbles", "Echo Server"].some(n => res.includes(`${n}.app" = 1`) || res.includes(`${n}" = 1`));
     }
 
     static async getFileMetadata(filePath: string): Promise<{ [key: string]: string }> {
@@ -728,10 +729,14 @@ export class FileSystem {
     <dict>
         <key>AssociatedBundleIdentifiers</key>
         <array>
-            <string>com.BlueBubbles.BlueBubbles-Server</string>
+            <string>com.echo.server-app</string>
         </array>
         <key>Label</key>
-        <string>com.bluebubbles.server</string>
+        <string>${ECHO_AGENT}</string>
+        <key>ProcessType</key>
+        <string>Interactive</string>
+        <key>ThrottleInterval</key>
+        <integer>10</integer>
         <key>Program</key>
         <string>${appPath}</string>
         <key>RunAtLoad</key>
@@ -746,7 +751,7 @@ export class FileSystem {
     </dict>
 </plist>`;
 
-        const plistName = "com.bluebubbles.server";
+        const plistName = ECHO_AGENT;
         const filePath = path.join(userHomeDir(), "Library", "LaunchAgents", `${plistName}.plist`);
         if (!fs.existsSync(filePath)) {
             fs.writeFileSync(filePath, plist);
@@ -768,7 +773,7 @@ export class FileSystem {
     }
 
     static async removeLaunchAgent(): Promise<void> {
-        const plistName = "com.bluebubbles.server";
+        const plistName = ECHO_AGENT;
         const filePath = path.join(userHomeDir(), "Library", "LaunchAgents", `${plistName}.plist`);
 
         // Disable should stop the service from starting on boot

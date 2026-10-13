@@ -4,6 +4,9 @@ export class TransactionManager {
     promises: TransactionPromise[] = [];
 
     add(promise: TransactionPromise) {
+        // Echo: drop settled transactions so the list doesn't grow for ever.
+        const cutoff = Date.now() - 10 * 60_000;
+        this.promises = this.promises.filter(p => !p.isResolved || p.createdAt > cutoff);
         this.promises.push(promise);
     }
 

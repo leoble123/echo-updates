@@ -49,7 +49,7 @@ export class AppTray extends Tray {
 
         try {
             this.instance = new ElectronTray(iconPath);
-            this.instance.setToolTip("BlueBubbles");
+            this.instance.setToolTip("Echo Server");
             this.instance.setContextMenu(this.buildMenu());
 
             // Rebuild the this.instance each time it's clicked
@@ -70,7 +70,7 @@ export class AppTray extends Tray {
             type: "normal",
             click: async () => {
                 if (Server()) {
-                    await Server().updater.checkForUpdate({ showNoUpdateDialog: true });
+                    await Server().updater?.checkForUpdate({ showNoUpdateDialog: true });
                 }
             }
         };

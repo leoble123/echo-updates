@@ -1,4 +1,5 @@
 import { Server } from "@server";
+import { EchoGuard } from "@server/services/echoGuard";
 import path from "path";
 import fs from "fs";
 import { FileSystem } from "@server/fileSystem";
@@ -93,6 +94,8 @@ export class FindMyInterface {
     }
 
     static async refreshLocationsAccessibility() {
+        // Echo Guard quits Find My when it's left in the background; give this refresh time to finish.
+        EchoGuard.touchFindMy();
         await FileSystem.executeAppleScript(quitFindMyFriends());
         await waitMs(3000);
 

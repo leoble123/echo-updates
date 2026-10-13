@@ -125,12 +125,20 @@ export abstract class DylibPlugin extends Loggable {
                     this.hideApp();
                 }, 5000);
 
-                Server().privateApi.on("client-registered", info => {
+                // Echo: one listener per launch, removed when the launch ends - these
+                // used to pile up with every Messages restart.
+                const onRegistered = (info: any) => {
                     if (info?.process !== this.bundleIdentifier) return;
-                    onSuccessfulStart();
-                });
+                    Server().privateApi.off("client-registered", onRegistered);
+                    onSuccessfulStart?.();
+                };
+                Server().privateApi.on("client-registered", onRegistered);
 
-                await promise;
+                try {
+                    await promise;
+                } finally {
+                    Server().privateApi?.off("client-registered", onRegistered);
+                }
 
                 // If it gets here, the dylib exited on its own (code: 0)
                 this.log.debug(`DYLIB exited on its own. Restarting...`);

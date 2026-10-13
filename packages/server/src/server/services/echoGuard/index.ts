@@ -1,0 +1,222 @@
+import { app } from "electron";
+import fs from "fs";
+import http from "http";
+import https from "https";
+import os from "os";
+import path from "path";
+import { Server } from "@server";
+import { FileSystem } from "@server/fileSystem";
+import { Loggable } from "@server/lib/logging/Loggable";
+
+/**
+ * Echo Guard keeps the server healthy on a small Mac without anyone watching it.
+ *
+ * Once a minute it:
+ *  - relaunches the server if its own memory stays too high, or if the API stops answering;
+ *  - restarts Messages if it bloats (the Private API loop relaunches it with the helper);
+ *  - relaunches the server if the Private API helper has been gone for five minutes;
+ *  - quits Find My and FaceTime when they are left running in the background;
+ *  - clears the server's attachment caches when the disk gets tight;
+ *  - relaunches once a night, between 4 and 5am, when nothing is being sent.
+ *
+ * Everything it does is written to the server log under "EchoGuard".
+ */
+export class EchoGuard extends Loggable {
+    tag = "EchoGuard";
+
+    private timer: NodeJS.Timeout = null;
+
+    private startedAt = Date.now();
+
+    private strikes = { self: 0, messages: 0, api: 0, helper: 0 };
+
+    /** Find My is left alone for a while after the server opens it to refresh locations. */
+    static findMyBusyUntil = 0;
+
+    static touchFindMy(ms = 3 * 60_000) {
+        EchoGuard.findMyBusyUntil = Math.max(EchoGuard.findMyBusyUntil, Date.now() + ms);
+    }
+
+    private get enabled() {
+        return (Server().repo?.getConfig("echo_guard") as boolean) ?? true;
+    }
+
+    private limit(key: string, fallback: number) {
+        const v = Number(Server().repo?.getConfig(key));
+        return Number.isFinite(v) && v > 0 ? v : fallback;
+    }
+
+    start() {
+        if (this.timer) return;
+        this.log.info("Echo Guard is watching the server.");
+        this.timer = setInterval(() => {
+            this.tick().catch(ex => this.log.debug(`Check failed: ${ex?.message ?? String(ex)}`));
+        }, 60_000);
+    }
+
+    stop() {
+        if (this.timer) clearInterval(this.timer);
+        this.timer = null;
+    }
+
+    async tick() {
+        if (!this.enabled || Server().isRestarting || Server().isStopping) return;
+
+        const procs = await this.processes();
+
+        // 1. The server's own memory, summed over every Electron process.
+        const selfMb = app.getAppMetrics().reduce((sum, m) => sum + (m.memory?.workingSetSize ?? 0), 0) / 1024;
+        if (this.strike("self", selfMb > this.limit("echo_server_limit_mb", 900), 3)) {
+            return this.relaunch(`server memory stayed at ${Math.round(selfMb)} MB`);
+        }
+
+        // 2. Messages. Killing it is enough: the Private API loop starts it again with the helper.
+        const messagesMb = procs.get("Messages") ?? 0;
+        if (this.strike("messages", messagesMb > this.limit("echo_messages_limit_mb", 1400), 3)) {
+            if (!this.sending()) {
+                this.log.info(`Restarting Messages (using ${Math.round(messagesMb)} MB)`);
+                await FileSystem.execShellCommand(`killall Messages`).catch((): null => null);
+                this.strikes.messages = 0;
+            }
+        }
+
+        // 3. The API itself.
+        const alive = await this.ping();
+        if (this.strike("api", !alive, 3)) return this.relaunch("the API stopped answering");
+
+        // 4. The Private API helper, which gives up after five quick crashes in a row.
+        const papi = Server().repo.getConfig("enable_private_api") as boolean;
+        const uptime = Date.now() - this.startedAt;
+        if (this.strike("helper", papi && uptime > 5 * 60_000 && !Server().privateApi?.helper, 5)) {
+            return this.relaunch("the Private API helper has been disconnected for five minutes");
+        }
+
+        // 5. Apps that only cost memory when they sit in the background.
+        const front = await this.frontmost();
+        if (procs.has("FindMy") && front !== "FindMy" && Date.now() > EchoGuard.findMyBusyUntil) {
+            this.log.info("Quitting Find My (left open in the background)");
+            await FileSystem.execShellCommand(`osascript -e 'quit app "FindMy"'`).catch((): null => null);
+        }
+        const ft = Server().repo.getConfig("enable_ft_private_api") as boolean;
+        if (!ft && procs.has("FaceTime") && front !== "FaceTime") {
+            this.log.info("Quitting FaceTime (left open in the background)");
+            await FileSystem.execShellCommand(`osascript -e 'quit app "FaceTime"'`).catch((): null => null);
+        }
+
+        // 6. Disk space.
+        const freeGb = this.freeDiskGb();
+        if (freeGb !== null && freeGb < this.limit("echo_min_free_gb", 10)) {
+            const cleared = this.clearCaches();
+            if (cleared > 0) {
+                const mb = Math.round(cleared / 1e6);
+                this.log.info(`Disk low (${freeGb.toFixed(1)} GB free): cleared ${mb} MB of caches`);
+            }
+        }
+
+        // 7. A fresh start each night.
+        const now = new Date();
+        const nightly = (Server().repo.getConfig("echo_nightly_restart") as boolean) ?? true;
+        if (nightly && now.getHours() === 4 && uptime > 12 * 3600_000 && !this.sending()) {
+            return this.relaunch("nightly refresh");
+        }
+    }
+
+    /** Counts consecutive bad checks; true once there have been `needed` of them. */
+    private strike(key: keyof EchoGuard["strikes"], bad: boolean, needed: number) {
+        this.strikes[key] = bad ? this.strikes[key] + 1 : 0;
+        return this.strikes[key] >= needed;
+    }
+
+    private sending() {
+        const pending = (Server().messageManager?.promises ?? []).some(p => !p.isResolved);
+        return pending;
+    }
+
+    private async relaunch(reason: string) {
+        this.log.info(`Relaunching: ${reason}`);
+        this.stop();
+        await Server().relaunch();
+    }
+
+    /** Resident memory in MB for the apps we care about, by name. */
+    private async processes(): Promise<Map<string, number>> {
+        const out = new Map<string, number>();
+        const text = await FileSystem.execShellCommand(`ps -axo rss=,comm=`).catch((): string => "");
+        for (const line of String(text).split("\n")) {
+            const m = line.trim().match(/^(\d+)\s+(.*)$/);
+            if (!m) continue;
+            const name = path.basename(m[2]);
+            if (!["Messages", "FindMy", "FaceTime"].includes(name)) continue;
+            if (!m[2].includes(`${name}.app/`)) continue;
+            out.set(name, (out.get(name) ?? 0) + Number(m[1]) / 1024);
+        }
+        return out;
+    }
+
+    private async frontmost(): Promise<string> {
+        // lsappinfo needs no extra permissions, unlike asking System Events.
+        const out = await FileSystem.execShellCommand(`lsappinfo info -only name "$(lsappinfo front)"`).catch(
+            (): string => ""
+        );
+        const m = String(out).match(/"LSDisplayName"="([^"]*)"/) ?? String(out).match(/=\s*"([^"]*)"/);
+        return m?.[1] ?? "";
+    }
+
+    private ping(): Promise<boolean> {
+        const port = Server().repo.getConfig("socket_port") as number;
+        const password = encodeURIComponent(String(Server().repo.getConfig("password") ?? ""));
+        const secure = !!Server().repo.getConfig("use_custom_certificate");
+        const client = secure ? https : http;
+        return new Promise(resolve => {
+            const req = client.get(
+                {
+                    host: "127.0.0.1",
+                    port,
+                    path: `/api/v1/ping?password=${password}`,
+                    timeout: 15_000,
+                    rejectUnauthorized: false
+                } as any,
+                res => {
+                    res.resume();
+                    resolve((res.statusCode ?? 500) < 500);
+                }
+            );
+            req.on("timeout", () => req.destroy(new Error("timeout")));
+            req.on("error", () => resolve(false));
+        });
+    }
+
+    private freeDiskGb(): number | null {
+        try {
+            const st = (fs as any).statfsSync?.(os.homedir());
+            if (!st) return null;
+            return (Number(st.bavail) * Number(st.bsize)) / 1e9;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Empties the server's own re-creatable caches. Returns bytes freed. */
+    private clearCaches(): number {
+        let freed = 0;
+        for (const dir of [FileSystem.attachmentCacheDir, FileSystem.convertDir]) {
+            if (!fs.existsSync(dir)) continue;
+            for (const name of fs.readdirSync(dir)) {
+                const p = path.join(dir, name);
+                try {
+                    freed += EchoGuard.size(p);
+                    (fs as any).rmSync(p, { recursive: true, force: true });
+                } catch {
+                    // In use; try again next time.
+                }
+            }
+        }
+        return freed;
+    }
+
+    private static size(p: string): number {
+        const st = fs.lstatSync(p);
+        if (!st.isDirectory()) return st.size;
+        return fs.readdirSync(p).reduce((sum, n) => sum + EchoGuard.size(path.join(p, n)), 0);
+    }
+}

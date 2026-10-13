@@ -462,7 +462,7 @@ export class IPCService extends Loggable {
         });
 
         ipcMain.handle("install-update", async (_, __) => {
-            if (!Server().updater.hasUpdate) {
+            if (!Server().updater?.hasUpdate) {
                 return Server().log("No update available to install!", "debug");
             }
 

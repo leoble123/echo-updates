@@ -56,4 +56,12 @@ export const DEFAULT_DB_ITEMS: { [key: string]: () => any } = {
     landing_page_path: () => "",
     open_findmy_on_startup: () => 1,
     auto_lock_mac: () => 0,
+    // Echo Server
+    echo_lean_applied: () => 0,
+    echo_guard: () => 1,
+    echo_nightly_restart: () => 1,
+    // Strings so they aren't read back as booleans (see start_delay).
+    echo_server_limit_mb: () => "900",
+    echo_messages_limit_mb: () => "1400",
+    echo_min_free_gb: () => "10",
 };

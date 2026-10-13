@@ -46,6 +46,17 @@ jobs:
           du -h "$OUT"
           echo "zip=$OUT" >> "$GITHUB_OUTPUT"
           echo "tag=server-$VERSION-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Smoke test (it must start and stay up)
+        run: |
+          APP=$(find packages/server/releases -maxdepth 3 -name "*.app" | head -1)
+          BIN="$APP/Contents/MacOS/$(defaults read "$PWD/$APP/Contents/Info" CFBundleExecutable)"
+          "$BIN" > smoke.log 2>&1 &
+          PID=$!
+          sleep 40
+          tail -n 60 smoke.log
+          if ! kill -0 $PID 2>/dev/null; then echo "::error::Echo Server exited during startup"; exit 1; fi
+          grep -q "Echo Guard is watching\|First Echo Server start\|EchoDefaults" smoke.log || echo "::warning::Didn't see Echo's startup lines (may need Full Disk Access to get that far)"
+          kill $PID; sleep 3; kill -9 $PID 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
           name: echo-server

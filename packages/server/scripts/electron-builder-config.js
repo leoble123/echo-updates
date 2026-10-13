@@ -1,8 +1,8 @@
 // NOTE: All paths are relative to the package.json that will be loading this configuration file.
 // Making them relative to the scripts folder will break the commands
 module.exports = {
-    "productName": "BlueBubbles",
-    "appId": "com.BlueBubbles.BlueBubbles-Server",
+    "productName": "Echo Server",
+    "appId": "com.echo.server-app",
     "npmRebuild": true,
     "directories": {
         "output": "releases",
@@ -14,17 +14,6 @@ module.exports = {
     ],
     "mac": {
         "category": "public.app-category.social-networking",
-        "publish": [
-            {
-                "provider": "github",
-                "repo": "bluebubbles-server",
-                "owner": "BlueBubblesApp",
-                "private": false,
-                "channel": "latest",
-                "releaseType": "draft",
-                "vPrefixedTagName": true
-            }
-        ],
         "target": [
             {
                 "target": "dmg",
@@ -42,9 +31,9 @@ module.exports = {
         "entitlements": "./scripts/entitlements.mac.plist",
         "entitlementsInherit": "./scripts/entitlements.mac.plist",
         "extendInfo": {
-            "NSContactsUsageDescription": "BlueBubbles needs access to your Contacts",
-            "NSAppleEventsUsageDescription": "BlueBubbles needs access to run AppleScripts",
-            "NSSystemAdministrationUsageDescription": "BlueBubbles needs access to manage your system",
+            "NSContactsUsageDescription": "Echo Server shows your contacts' names and photos in the Echo apps",
+            "NSAppleEventsUsageDescription": "Echo Server uses AppleScript to send messages and keep Messages running",
+            "NSSystemAdministrationUsageDescription": "Echo Server needs this to keep your Mac awake and restart itself",
         },
         "gatekeeperAssess": false,
         "minimumSystemVersion": "10.11.0",

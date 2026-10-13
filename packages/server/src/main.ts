@@ -4,6 +4,7 @@ import "@server/env";
 import { app, nativeTheme } from "electron";
 import process from "process";
 import fs from "fs";
+import path from "path";
 import yaml from "js-yaml";
 import { FileSystem } from "@server/fileSystem";
 import { ParseArguments } from "@server/helpers/argParser";
@@ -16,8 +17,13 @@ import { getLogger } from "@server/lib/logging/Loggable";
 
 app.commandLine.appendSwitch("in-process-gpu");
 
-// Patch in original user data directory
-app.setPath("userData", app.getPath("userData").replace("@bluebubbles/server", "bluebubbles-server"));
+// Echo: a server needs no GPU. Off for every launch, rather than a relaunch to turn it off.
+app.disableHardwareAcceleration();
+// Echo: keep the V8 heap of each process in check.
+app.commandLine.appendSwitch("js-flags", "--max-old-space-size=768");
+
+// Echo: share BlueBubbles' data folder, so its settings, password and address carry straight over.
+app.setPath("userData", path.join(app.getPath("appData"), "bluebubbles-server"));
 
 // Load the config file
 let cfg = {};
