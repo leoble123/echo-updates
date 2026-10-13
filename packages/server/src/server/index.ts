@@ -670,16 +670,17 @@ class BlueBubblesServer extends EventEmitter {
         this.logger.info("Starting Services...");
         await this.startServices();
 
+        // Echo: BlueBubbles' own updater is off for good (it would install BlueBubbles over Echo).
+        // Echo Guard takes its place, keeping the server, Messages and the disk healthy. It starts
+        // as soon as the services do, not after the checks below (which can wait on a prompt).
+        this.echoGuard = new EchoGuard();
+        this.echoGuard.start();
+
         // Perform any post-setup tasks/checks
         await this.postChecks();
 
         // Let everyone know the setup is complete
         this.emit("setup-complete");
-
-        // Echo: BlueBubbles' own updater is off for good (it would install BlueBubbles over Echo).
-        // Echo Guard takes its place, keeping the server, Messages and the disk healthy.
-        this.echoGuard = new EchoGuard();
-        this.echoGuard.start();
     }
 
     /**
@@ -918,7 +919,11 @@ class BlueBubblesServer extends EventEmitter {
         }
 
         // Check for contact permissions
-        const contactStatus = await requestContactPermission();
+        // Echo: macOS waits for someone to answer the Contacts prompt; don't hold start-up on it.
+        const contactStatus = await Promise.race([
+            requestContactPermission(),
+            waitMs(20_000).then(() => "Not answered yet")
+        ]);
         if (contactStatus === "Denied") {
             this.logger.debug(
                 "Contacts authorization status is denied! You may need to manually " +
