@@ -11,6 +11,7 @@ import { EchoAI } from "@server/services/echoAI";
 import { EchoMacApps } from "@server/services/echoMacApps";
 import { EchoHandoff } from "@server/services/echoHandoff";
 import { EchoTyping } from "@server/services/echoTyping";
+import { EchoSearch } from "@server/services/echoSearch";
 import { FileStream, Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
@@ -45,6 +46,7 @@ export class EchoRouter {
                 privateApi: !!Server().privateApi?.helper,
                 pushSubscribers: EchoPush.get().count,
                 typing: EchoTyping.summary(),
+                searchIndex: EchoSearch.get().status,
                 // For Echo for Mac: what it needs to show and manage.
                 permissions: {
                     fullDisk: Server().hasDiskAccess,
@@ -165,6 +167,18 @@ export class EchoRouter {
     };
 
     static typingTest = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, () => EchoTyping.test());
+
+    /** Full-history search: ?q=words&chat=guid&limit=&offset= */
+    static async search(ctx: RouterContext, _: Next) {
+        const q = ctx.request.query ?? {};
+        const hits = EchoSearch.get().search(String(q.q ?? ""), {
+            chat: q.chat ? String(q.chat) : undefined,
+            fromMe: q.fromMe === "1" ? true : q.fromMe === "0" ? false : undefined,
+            limit: Number(q.limit) || 50,
+            offset: Number(q.offset) || 0
+        });
+        return new Success(ctx, { data: { hits, index: EchoSearch.get().status } }).send();
+    }
 
     // --- Settings, for Echo for Mac ---------------------------------------------
 

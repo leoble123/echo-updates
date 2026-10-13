@@ -686,6 +686,7 @@ export class HttpRoutes {
                     { method: HttpMethod.POST, path: "notes/update", controller: EchoRouter.updateNote },
                     { method: HttpMethod.POST, path: "ai/key", controller: EchoRouter.aiKey },
                     { method: HttpMethod.POST, path: "typing/test", controller: EchoRouter.typingTest },
+                    { method: HttpMethod.GET, path: "search", controller: EchoRouter.search },
                     { method: HttpMethod.GET, path: "settings", controller: EchoRouter.settings },
                     { method: HttpMethod.POST, path: "settings", controller: EchoRouter.setSettings },
                     { method: HttpMethod.POST, path: "password", controller: EchoRouter.newPassword },

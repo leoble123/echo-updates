@@ -74,6 +74,7 @@ import { MacOsInterface } from "./api/interfaces/macosInterface";
 import { EchoGuard } from "./services/echoGuard";
 import { EchoPush } from "./services/echoPush";
 import { EchoHandoff } from "./services/echoHandoff";
+import { EchoSearch } from "./services/echoSearch";
 import { applyEchoDefaults, underLaunchd } from "./services/echoGuard/defaults";
 
 const findProcess = require("find-process");
@@ -677,6 +678,7 @@ class BlueBubblesServer extends EventEmitter {
         this.echoGuard = new EchoGuard();
         this.echoGuard.start();
         EchoHandoff.get().start();
+        EchoSearch.get().start();
 
         // Perform any post-setup tasks/checks
         await this.postChecks();
