@@ -2,11 +2,7 @@ import { ServerRepository } from "@server/databases/server";
 import { AutoStartMethods } from "@server/databases/server/constants";
 import { getLogger } from "@server/lib/logging/Loggable";
 
-/** The launchd label Echo Server runs under. */
-export const ECHO_AGENT = "com.echo.server";
-
-/** True when launchd started this process (so exiting non-zero brings it straight back). */
-export const underLaunchd = () => process.env.XPC_SERVICE_NAME === ECHO_AGENT;
+export { ECHO_AGENT, underLaunchd } from "./agent";
 
 /** Settings that are always held, whatever the database says. */
 const ALWAYS: Record<string, string | number | boolean> = {

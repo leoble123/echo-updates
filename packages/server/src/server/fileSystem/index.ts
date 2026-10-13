@@ -1,5 +1,5 @@
 import * as fs from "fs";
-import { ECHO_AGENT } from "@server/services/echoGuard/defaults";
+import { ECHO_AGENT } from "@server/services/echoGuard/agent";
 import * as path from "path";
 import * as os from "os";
 import * as child_process from "child_process";
