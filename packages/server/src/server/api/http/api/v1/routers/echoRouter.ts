@@ -163,6 +163,8 @@ export class EchoRouter {
         );
     };
 
+    static typingTest = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, () => EchoTyping.test());
+
     // --- Clipboard and file drop ------------------------------------------------
 
     static async clipboard(ctx: RouterContext, _: Next) {

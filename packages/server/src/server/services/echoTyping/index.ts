@@ -1,3 +1,6 @@
+import { Server } from "@server";
+import { TYPING_INDICATOR } from "@server/events";
+
 /**
  * What's happened with typing indicators, for the phone's Your Mac screen:
  * whether Messages is reporting other people typing at all, and whether
@@ -30,5 +33,19 @@ export class EchoTyping {
             sent: EchoTyping.sentCount,
             lastSentAt: EchoTyping.lastSent?.at ?? null
         };
+    }
+
+    /**
+     * A pretend "typing…" in your most recent conversation, sent to your
+     * devices exactly as a real one would be, then cleared. Tests everything
+     * from here to the phone without needing someone to type.
+     */
+    static async test(): Promise<{ chat: string }> {
+        const [messages] = await Server().iMessageRepo.getMessages({ limit: 1, sort: "DESC", withChats: true, withAttachments: false });
+        const chat = messages[0]?.chats?.[0];
+        if (!chat?.guid) throw new Error("No conversations to test with yet");
+        Server().emitMessage(TYPING_INDICATOR, { display: true, guid: chat.guid }, "normal", false);
+        setTimeout(() => Server().emitMessage(TYPING_INDICATOR, { display: false, guid: chat.guid }, "normal", false), 8000);
+        return { chat: chat.displayName || chat.chatIdentifier || chat.guid };
     }
 }

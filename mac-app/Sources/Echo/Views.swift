@@ -270,6 +270,7 @@ struct ConnectionPane: View {
         Card(title: "TYPING INDICATORS") {
             Row(title: "Others typing, heard from Messages", value: s.typingLastHeard.map { "\(s.typingHeard) · \(ago($0))" } ?? "Never", good: s.typingHeard > 0)
             Row(title: "Yours, sent", value: "\(s.typingSent)")
+            Button("Show a Test Bubble on My Devices") { brain.testTyping() }
             Text(s.typingHeard == 0
                  ? "Typing comes from the Private API helper inside Messages. If someone types to you and this stays at Never, try Restart Messages."
                  : "Typing is reaching Echo. If a phone still doesn't show it, its live connection is the place to look.")

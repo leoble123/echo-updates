@@ -685,6 +685,7 @@ export class HttpRoutes {
                     { method: HttpMethod.POST, path: "notes", controller: EchoRouter.addNote },
                     { method: HttpMethod.POST, path: "notes/update", controller: EchoRouter.updateNote },
                     { method: HttpMethod.POST, path: "ai/key", controller: EchoRouter.aiKey },
+                    { method: HttpMethod.POST, path: "typing/test", controller: EchoRouter.typingTest },
                     { method: HttpMethod.GET, path: "clipboard", controller: EchoRouter.clipboard },
                     { method: HttpMethod.POST, path: "clipboard", controller: EchoRouter.setClipboard },
                     { method: HttpMethod.POST, path: "clipboard/sync", controller: EchoRouter.clipboardSync },

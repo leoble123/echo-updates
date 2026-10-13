@@ -139,6 +139,18 @@ final class Brain: ObservableObject {
         }
     }
 
+    /// A pretend "typing…" on your phone and Echo Web, in your latest conversation.
+    func testTyping() {
+        Task {
+            do {
+                let r = try await api?.call("POST", "/echo/typing/test") as? [String: Any]
+                note = "Look at \(r?["chat"] as? String ?? "your latest conversation") on your phone - the typing bubble shows for 8 seconds. If it doesn't, the phone's live connection is the problem."
+            } catch {
+                note = "Couldn't test: \(error.localizedDescription)"
+            }
+        }
+    }
+
     func setAIKey(_ key: String) {
         Task {
             do {
