@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { EchoTyping } from "@server/services/echoTyping";
 import { Chat } from "@server/databases/imessage/entity/Chat";
 import {
     checkPrivateApiStatus,
@@ -471,9 +472,29 @@ export class ChatInterface {
         });
     }
 
+    /**
+     * Every spelling Messages might know a chat by. On macOS 26 the database
+     * says "any;-;…" while Messages' own chat registry can still say
+     * "iMessage;-;…" - and a typing call to a name it doesn't know fails
+     * silently. Sending to both costs nothing: the unknown one is a no-op.
+     */
+    static guidSpellings(chatGuid: string): string[] {
+        const m = /^([^;]+);([-+]);(.+)$/.exec(chatGuid ?? "");
+        if (!m) return [chatGuid];
+        const [, service, kind, rest] = m;
+        const spellings = [chatGuid];
+        if (service === "any" || service === "iMessage") {
+            spellings.push(`${service === "any" ? "iMessage" : "any"};${kind};${rest}`);
+        }
+        return spellings;
+    }
+
     static async startTyping(chatGuid: string): Promise<void> {
         checkPrivateApiStatus();
-        await Server().privateApi.chat.startTyping(chatGuid);
+        for (const guid of ChatInterface.guidSpellings(chatGuid)) {
+            await Server().privateApi.chat.startTyping(guid);
+        }
+        EchoTyping.sent(chatGuid, true);
 
         // Add the chat to the typing cache
         if (!Server().typingCache.includes(chatGuid)) {
@@ -483,8 +504,11 @@ export class ChatInterface {
 
     static async stopTyping(chatGuid: string): Promise<void> {
         checkPrivateApiStatus();
-        await Server().privateApi.chat.stopTyping(chatGuid);
-        
+        for (const guid of ChatInterface.guidSpellings(chatGuid)) {
+            await Server().privateApi.chat.stopTyping(guid);
+        }
+        EchoTyping.sent(chatGuid, false);
+
         // Remove the chat from the typing cache
         if (Server().typingCache.includes(chatGuid)) {
             Server().typingCache = Server().typingCache.filter(c => c !== chatGuid);

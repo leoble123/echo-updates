@@ -1,6 +1,7 @@
 import { Server } from "@server";
 import * as net from "net";
 import { TYPING_INDICATOR } from "@server/events";
+import { EchoTyping } from "@server/services/echoTyping";
 import { PrivateApiEventHandler, EventData } from ".";
 
 export class PrivateApiTypingEventHandler implements PrivateApiEventHandler {
@@ -13,8 +14,10 @@ export class PrivateApiTypingEventHandler implements PrivateApiEventHandler {
         const guid = data.guid;
         let shouldEmit = false;
 
-        // Ignore typing events from group chats (they aren't "proper")
-        if (guid.includes(";+;")) return;
+        if (!guid) return;
+        // Echo: group chats are let through too - Echo matches them to the
+        // conversation, and clears a bubble on its own if a stop never comes.
+        EchoTyping.heard(guid, display);
 
         // If the guid hasn't been seen before, we should emit the event
         const now = new Date().getTime();

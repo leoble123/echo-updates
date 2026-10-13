@@ -8,6 +8,7 @@ import { EchoPush } from "@server/services/echoPush";
 import { EchoAI } from "@server/services/echoAI";
 import { EchoMacApps } from "@server/services/echoMacApps";
 import { EchoHandoff } from "@server/services/echoHandoff";
+import { EchoTyping } from "@server/services/echoTyping";
 import { FileStream, Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
@@ -41,6 +42,7 @@ export class EchoRouter {
                 },
                 privateApi: !!Server().privateApi?.helper,
                 pushSubscribers: EchoPush.get().count,
+                typing: EchoTyping.summary(),
                 events: EchoGuard.events.slice(-15)
             }
         }).send();
