@@ -27,9 +27,10 @@ export class AppWindow extends Window {
         return this;
     }
 
-    build(): AppWindow {
+    /** [force]: open it even in headless mode - someone asked to see it (menu bar Open, the app icon). */
+    build(force = false): AppWindow {
         const headless = (Server().repo?.getConfig("headless") as boolean) ?? false;
-        if (headless) {
+        if (headless && !force) {
             Server().log("Headless mode enabled, skipping window creation...");
             return;
         }
@@ -66,6 +67,8 @@ export class AppWindow extends Window {
     registerEventHandlers() {
         this.instance.on("closed", () => {
             this.instance = null;
+            // Echo: forget it, so nothing talks to a destroyed window and its memory is freed.
+            Server().window = null;
         });
 
         // Prevent the title from being changed from BlueBubbles

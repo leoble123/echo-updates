@@ -95,11 +95,13 @@ export class AppTray extends Tray {
                 label: "Open",
                 type: "normal",
                 click: () => {
-                    if (Server().window && !Server().window.isDestroyed) {
+                    if (Server().window && !Server().window.isDestroyed()) {
                         Server().window.show();
+                        Server().window.focus();
                     } else {
-                        AppWindow.getInstance().setArguments(this.arguments).build();
+                        AppWindow.getInstance().setArguments(this.arguments).build(true);
                     }
+                    app.focus({ steal: true });
                 }
             },
             updateOpt,

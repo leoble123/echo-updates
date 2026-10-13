@@ -46,11 +46,16 @@ if (!gotTheLock) {
     console.error("BlueBubbles is already running! Quiting...");
     app.exit(0);
 } else {
+    // Opening the app again (Finder, Spotlight) shows its window, even when running headless.
     app.on("second-instance", (_, __, ___) => {
-        if (Server().window) {
+        if (Server().window && !Server().window.isDestroyed()) {
             if (Server().window.isMinimized()) Server().window.restore();
+            Server().window.show();
             Server().window.focus();
+        } else if (Server().repo) {
+            AppWindow.getInstance().setArguments(parsedArgs).build(true);
         }
+        app.focus({ steal: true });
     });
 
     // Start the Server() when the app is ready

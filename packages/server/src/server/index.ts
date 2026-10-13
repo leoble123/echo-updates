@@ -779,8 +779,9 @@ class BlueBubblesServer extends EventEmitter {
 
         // Start minimized if enabled
         const startMinimized = Server().repo.getConfig("start_minimized") as boolean;
+        // Echo: headless has no window to minimise (this used to stop start-up here).
         if (startMinimized) {
-            this.window.minimize();
+            this.window?.minimize();
         }
 
         // Disable the encryp coms setting if it's enabled.

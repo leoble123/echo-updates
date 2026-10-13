@@ -67,6 +67,11 @@ jobs:
           sqlite3 "$CFG" "select name, value from config where name like 'echo%' or name in ('headless','check_for_updates','disable_gpu','open_findmy_on_startup','auto_start_method');"
           test "$(sqlite3 "$CFG" "select value from config where name='echo_lean_applied';")" = "1" || { echo "::error::Echo's lean defaults weren't applied"; exit 1; }
           test "$(sqlite3 "$CFG" "select value from config where name='check_for_updates';")" = "0" || { echo "::error::BlueBubbles' updater is still on"; exit 1; }
+          # It must get all the way through start-up, not just stay alive.
+          LOG="$HOME/Library/Logs/bluebubbles-server/main.log"
+          for i in $(seq 1 30); do grep -q "Echo Guard is watching" "$LOG" 2>/dev/null && break; sleep 3; done
+          grep -q "Echo Guard is watching" "$LOG" || { echo "::error::Start-up didn't finish. Last log lines:"; tail -n 15 "$LOG"; exit 1; }
+          grep -n "Starting HTTP service\|Echo Guard is watching" "$LOG"
           kill $PID; sleep 3; kill -9 $PID 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
