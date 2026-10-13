@@ -1,0 +1,58 @@
+name: Build Echo Server
+
+on:
+  push:
+    branches: [server]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14   # Apple Silicon, like the iMac
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.11"
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Build the settings UI
+        run: npm run build-ui
+      - name: Build the server
+        working-directory: packages/server
+        run: npm run build
+      - name: Package (Apple Silicon, unsigned - the Mac signs it on install)
+        working-directory: packages/server
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder build --mac dir --arm64 --publish never --config ./scripts/electron-builder-config.js -c.mac.identity=null
+      - name: Seal and zip
+        id: pack
+        run: |
+          APP=$(find packages/server/releases -maxdepth 3 -name "*.app" | head -1)
+          echo "Built: $APP"
+          codesign --force --deep -s - "$APP"
+          VERSION=$(node -p "require('./packages/server/package.json').version")
+          OUT="EchoServer-$VERSION-$GITHUB_RUN_NUMBER.zip"
+          ditto -c -k --keepParent "$APP" "$OUT"
+          shasum -a 256 "$OUT" | tee "$OUT.sha256"
+          du -h "$OUT"
+          echo "zip=$OUT" >> "$GITHUB_OUTPUT"
+          echo "tag=server-$VERSION-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: echo-server
+          path: ${{ steps.pack.outputs.zip }}
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.pack.outputs.tag }}" "${{ steps.pack.outputs.zip }}" "${{ steps.pack.outputs.zip }}.sha256" \
+            --target "$GITHUB_SHA" --prerelease --title "Echo Server ${{ steps.pack.outputs.tag }}" --notes "Built from $GITHUB_SHA"
