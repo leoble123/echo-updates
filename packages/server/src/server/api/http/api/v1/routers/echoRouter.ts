@@ -6,6 +6,7 @@ import { Server } from "@server";
 import { EchoGuard } from "@server/services/echoGuard";
 import { EchoPush } from "@server/services/echoPush";
 import { EchoAI } from "@server/services/echoAI";
+import { EchoMacApps } from "@server/services/echoMacApps";
 import { Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
@@ -79,6 +80,75 @@ export class EchoRouter {
             throw new BadRequest({ error: message });
         }
     }
+
+    // --- Reminders & Notes (the Mac's own apps) ----------------------------------
+
+    /** Runs [work], turning a failure into a 400 whose message the phone can show as-is. */
+    private static async mac<T>(ctx: RouterContext, work: () => Promise<T>) {
+        try {
+            return new Success(ctx, { data: await work() }).send();
+        } catch (ex: any) {
+            throw new BadRequest({ error: ex?.message ?? "The Mac didn't answer" });
+        }
+    }
+
+    private static body(ctx: RouterContext): any {
+        return ctx.request.body ?? {};
+    }
+
+    static reminders = (ctx: RouterContext, _: Next) =>
+        EchoRouter.mac(ctx, () => EchoMacApps.get().reminders(ctx.request.query?.fresh === "1"));
+
+    static addReminder = (ctx: RouterContext, _: Next) => {
+        const { name, list, due, body } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, () =>
+            EchoMacApps.get().addReminder({
+                name: String(name ?? ""),
+                list: typeof list === "string" ? list : undefined,
+                due: typeof due === "number" ? due : undefined,
+                body: typeof body === "string" ? body : undefined
+            })
+        );
+    };
+
+    static updateReminder = (ctx: RouterContext, _: Next) => {
+        const { id, completed, name, flagged, due } = EchoRouter.body(ctx);
+        if (typeof id !== "string") throw new BadRequest({ error: "id is required" });
+        const change: { completed?: boolean; name?: string; flagged?: boolean; due?: number | null } = {};
+        if (typeof completed === "boolean") change.completed = completed;
+        if (typeof name === "string") change.name = name.slice(0, 500);
+        if (typeof flagged === "boolean") change.flagged = flagged;
+        if (typeof due === "number" || due === null) change.due = due;
+        return EchoRouter.mac(ctx, () => EchoMacApps.get().updateReminder(id, change).then(() => ({ ok: true })));
+    };
+
+    static deleteReminder = (ctx: RouterContext, _: Next) => {
+        const { id } = EchoRouter.body(ctx);
+        if (typeof id !== "string") throw new BadRequest({ error: "id is required" });
+        return EchoRouter.mac(ctx, () => EchoMacApps.get().deleteReminder(id).then(() => ({ ok: true })));
+    };
+
+    static notes = (ctx: RouterContext, _: Next) =>
+        EchoRouter.mac(ctx, () => EchoMacApps.get().notes(ctx.request.query?.fresh === "1"));
+
+    static note = (ctx: RouterContext, _: Next) => {
+        const id = String(ctx.request.query?.id ?? "");
+        if (!id) throw new BadRequest({ error: "id is required" });
+        return EchoRouter.mac(ctx, () => EchoMacApps.get().note(id));
+    };
+
+    static addNote = (ctx: RouterContext, _: Next) => {
+        const { text } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, () => EchoMacApps.get().addNote(String(text ?? "").slice(0, 200_000)));
+    };
+
+    static updateNote = (ctx: RouterContext, _: Next) => {
+        const { id, text } = EchoRouter.body(ctx);
+        if (typeof id !== "string") throw new BadRequest({ error: "id is required" });
+        return EchoRouter.mac(ctx, () =>
+            EchoMacApps.get().updateNote(id, String(text ?? "").slice(0, 200_000)).then(() => ({ ok: true }))
+        );
+    };
 
     static async pushKey(ctx: RouterContext, _: Next) {
         return new Success(ctx, { data: { publicKey: EchoPush.get().publicKey() } }).send();

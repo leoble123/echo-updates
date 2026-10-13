@@ -7,6 +7,7 @@ import path from "path";
 import { Server } from "@server";
 import { FileSystem } from "@server/fileSystem";
 import { Loggable } from "@server/lib/logging/Loggable";
+import { EchoMacApps } from "@server/services/echoMacApps";
 
 /**
  * Echo Guard keeps the server healthy on a small Mac without anyone watching it.
@@ -167,6 +168,14 @@ export class EchoGuard extends Loggable {
         if (!ft && procs.has("FaceTime") && front !== "FaceTime") {
             this.note("Quitting FaceTime (left open in the background)");
             await FileSystem.execShellCommand(`osascript -e 'quit app "FaceTime"'`).catch((): null => null);
+        }
+
+        // Reminders and Notes, when Echo opened them to answer the phone: quit once idle.
+        for (const [name, lastUsed] of EchoMacApps.openedByEcho) {
+            if (Date.now() - lastUsed < 2 * 60_000 || front === name) continue;
+            EchoMacApps.openedByEcho.delete(name);
+            await FileSystem.execShellCommand(`osascript -e 'quit app "${name}"'`).catch((): null => null);
+            this.log.debug(`Quit ${name} (opened by Echo, now idle)`);
         }
 
         // 6. Disk space.

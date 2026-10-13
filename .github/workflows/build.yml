@@ -73,6 +73,29 @@ jobs:
           grep -q "Echo Guard is watching" "$LOG" || { echo "::error::Start-up didn't finish. Last log lines:"; tail -n 15 "$LOG"; exit 1; }
           grep -n "Starting HTTP service\|Echo Guard is watching" "$LOG"
           kill $PID; sleep 3; kill -9 $PID 2>/dev/null || true
+      - name: Reminders & Notes scripts compile (and run, where CI allows)
+        run: |
+          mkdir -p jxa
+          npx --yes typescript@5.4.5 tsc --module commonjs --target es2019 --outDir jxa packages/server/src/server/services/echoMacApps/scripts.ts
+          node -e '
+            const fs = require("fs"); const s = require("./jxa/scripts.js");
+            for (const [k, v] of Object.entries(s)) fs.writeFileSync("jxa/" + k + ".js", v);
+          '
+          for f in jxa/[A-Z]*.js; do
+            osacompile -l JavaScript -o "${f%.js}.scpt" "$f" || { echo "::error::$f doesn't compile"; exit 1; }
+            echo "compiles: $f"
+          done
+          # Live, but only informational: a CI Mac may not let scripts control Notes/Reminders.
+          run() { perl -e 'alarm 40; exec @ARGV' osascript -l JavaScript "jxa/$1.js" "$2" 2>&1 | cut -c1-300; }
+          echo "--- NOTE_CREATE"; OUT=$(run NOTE_CREATE '{"html":"<div><h1>Echo CI &amp; test</h1></div><div>line &lt;2&gt;</div>"}'); echo "$OUT"
+          ID=$(echo "$OUT" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+          if [ -n "$ID" ]; then
+            echo "--- NOTE_GET"; run NOTE_GET "{\"id\":\"$ID\"}"
+            echo "--- NOTE_UPDATE"; run NOTE_UPDATE "{\"id\":\"$ID\",\"html\":\"<div><h1>Edited</h1></div>\"}"
+            echo "--- NOTES_LIST"; run NOTES_LIST '{"limit":5}'
+          fi
+          echo "--- REMINDERS_LIST"; run REMINDERS_LIST '{}'
+          true
       - name: Claude SDK runs in Echo Server's own runtime
         run: |
           APP=$(find packages/server/releases -maxdepth 3 -name "*.app" | head -1)
