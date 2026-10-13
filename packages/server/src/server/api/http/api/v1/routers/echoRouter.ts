@@ -31,6 +31,11 @@ export class EchoRouter {
                       }
                     : null,
                 freeDiskGb: reading?.freeDiskGb == null ? null : Math.round(reading.freeDiskGb * 10) / 10,
+                messagesGb: EchoGuard.messagesGb,
+                limitsMb: {
+                    server: Number(Server().repo.getConfig("echo_server_limit_mb")) || 900,
+                    messages: Number(Server().repo.getConfig("echo_messages_limit_mb")) || 1400
+                },
                 privateApi: !!Server().privateApi?.helper,
                 pushSubscribers: EchoPush.get().count,
                 events: EchoGuard.events.slice(-15)

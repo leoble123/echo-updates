@@ -67,6 +67,24 @@ export class EchoGuard extends Loggable {
         freeDiskGb: number;
     } = null;
 
+    /** Size of ~/Library/Messages (texts and attachments), in GB; measured every six hours. */
+    static messagesGb: number = null;
+
+    private sizedAt = 0;
+
+    /** du over years of attachments takes a while, so it runs in the background, rarely. */
+    private measureMessages() {
+        if (Date.now() - this.sizedAt < 6 * 3600_000) return;
+        this.sizedAt = Date.now();
+        const dir = path.join(os.homedir(), "Library", "Messages");
+        FileSystem.execShellCommand(`du -sk "${dir}"`)
+            .then(out => {
+                const kb = Number(String(out).trim().split(/\s+/)[0]);
+                if (Number.isFinite(kb) && kb > 0) EchoGuard.messagesGb = Math.round((kb / 1048576) * 10) / 10;
+            })
+            .catch((): null => null);
+    }
+
     /** Find My is left alone for a while after the server opens it to refresh locations. */
     static findMyBusyUntil = 0;
 
@@ -102,6 +120,7 @@ export class EchoGuard extends Loggable {
         if (!this.enabled || Server().isRestarting || Server().isStopping) return;
 
         const procs = await this.processes();
+        this.measureMessages();
 
         // 1. The server's own memory, summed over every Electron process.
         const selfMb = app.getAppMetrics().reduce((sum, m) => sum + (m.memory?.workingSetSize ?? 0), 0) / 1024;
