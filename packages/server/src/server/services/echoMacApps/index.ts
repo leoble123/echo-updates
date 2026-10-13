@@ -83,19 +83,29 @@ export class EchoMacApps extends Loggable {
                         { timeout: 45_000, maxBuffer: 16 * 1024 * 1024 },
                         (err, stdout, stderr) => {
                             if (err) {
-                                const text = String(stderr || err.message);
-                                // -1743: the user hasn't allowed Echo Server to control the app.
+                                const text = String(stderr ?? "");
+                                // Never err.message: it repeats the whole command line, script and all.
                                 if (/-1743|not authori[sz]ed/i.test(text)) {
-                                    const msg = `Allow Echo Server to control ${app} on your Mac ` +
-                                        "(a prompt appears there).";
-                                    reject(new Error(msg));
+                                    reject(new Error(
+                                        `Echo Server isn't allowed to control ${app}. On the Mac, open System Settings → ` +
+                                        `Privacy & Security → Automation → Echo Server, switch on ${app}.`
+                                    ));
+                                } else if ((err as any).killed || (err as any).signal) {
+                                    reject(new Error(
+                                        `${app} didn't answer in time. If your Mac is showing a prompt about ` +
+                                        `Echo Server controlling ${app}, click Allow, then try again.`
+                                    ));
                                 } else {
-                                    reject(new Error(text.trim().split("\n").pop() || `${app} didn't answer`));
+                                    const last = text.trim().split("\n").pop()?.replace(/^.*execution error:\s*/, "");
+                                    this.log.debug(`${app} script failed: ${text.trim().slice(0, 500)}`);
+                                    reject(new Error(last || `${app} didn't answer`));
                                 }
                                 return;
                             }
                             try {
-                                resolve(JSON.parse(String(stdout).trim() || "null"));
+                                const value = JSON.parse(String(stdout).trim() || "null");
+                                if (value == null) reject(new Error(`${app} answered with nothing - try again`));
+                                else resolve(value);
                             } catch {
                                 reject(new Error(`${app} sent something unexpected`));
                             }
