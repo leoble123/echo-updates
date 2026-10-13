@@ -50,12 +50,20 @@ jobs:
         run: |
           APP=$(find packages/server/releases -maxdepth 3 -name "*.app" | head -1)
           BIN="$APP/Contents/MacOS/$(defaults read "$PWD/$APP/Contents/Info" CFBundleExecutable)"
+          touch start.marker
           "$BIN" > smoke.log 2>&1 &
           PID=$!
           sleep 40
           tail -n 60 smoke.log
           if ! kill -0 $PID 2>/dev/null; then echo "::error::Echo Server exited during startup"; exit 1; fi
-          grep -q "Echo Guard is watching\|First Echo Server start\|EchoDefaults" smoke.log || echo "::warning::Didn't see Echo's startup lines (may need Full Disk Access to get that far)"
+          echo "--- logs written during the run"
+          find "$HOME/Library/Logs" -name "*.log" -newer start.marker -print -exec tail -n 25 {} \; 2>/dev/null | cut -c1-220
+          echo "--- Echo settings in the shared config database"
+          CFG="$HOME/Library/Application Support/bluebubbles-server/config.db"
+          test -f "$CFG" || { echo "::error::config.db isn't in BlueBubbles' data folder"; exit 1; }
+          sqlite3 "$CFG" "select name, value from config where name like 'echo%' or name in ('headless','check_for_updates','disable_gpu','open_findmy_on_startup','auto_start_method');"
+          test "$(sqlite3 "$CFG" "select value from config where name='echo_lean_applied';")" = "1" || { echo "::error::Echo's lean defaults weren't applied"; exit 1; }
+          test "$(sqlite3 "$CFG" "select value from config where name='check_for_updates';")" = "0" || { echo "::error::BlueBubbles' updater is still on"; exit 1; }
           kill $PID; sleep 3; kill -9 $PID 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
