@@ -73,6 +73,7 @@ import { AutoStartMethods } from "./databases/server/constants";
 import { MacOsInterface } from "./api/interfaces/macosInterface";
 import { EchoGuard } from "./services/echoGuard";
 import { EchoPush } from "./services/echoPush";
+import { EchoHandoff } from "./services/echoHandoff";
 import { applyEchoDefaults, underLaunchd } from "./services/echoGuard/defaults";
 
 const findProcess = require("find-process");
@@ -675,6 +676,7 @@ class BlueBubblesServer extends EventEmitter {
         // as soon as the services do, not after the checks below (which can wait on a prompt).
         this.echoGuard = new EchoGuard();
         this.echoGuard.start();
+        EchoHandoff.get().start();
 
         // Perform any post-setup tasks/checks
         await this.postChecks();

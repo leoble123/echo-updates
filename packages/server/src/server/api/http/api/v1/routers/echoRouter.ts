@@ -7,7 +7,8 @@ import { EchoGuard } from "@server/services/echoGuard";
 import { EchoPush } from "@server/services/echoPush";
 import { EchoAI } from "@server/services/echoAI";
 import { EchoMacApps } from "@server/services/echoMacApps";
-import { Success } from "../responses/success";
+import { EchoHandoff } from "@server/services/echoHandoff";
+import { FileStream, Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
 type Preview = { url: string; title?: string; description?: string; image?: string; site?: string; icon?: string };
@@ -148,6 +149,65 @@ export class EchoRouter {
         return EchoRouter.mac(ctx, () =>
             EchoMacApps.get().updateNote(id, String(text ?? "").slice(0, 200_000)).then(() => ({ ok: true }))
         );
+    };
+
+    // --- Clipboard and file drop ------------------------------------------------
+
+    static async clipboard(ctx: RouterContext, _: Next) {
+        const h = EchoHandoff.get();
+        return new Success(ctx, { data: { enabled: h.clipboardOn, last: h.last } }).send();
+    }
+
+    static setClipboard = (ctx: RouterContext, _: Next) => {
+        const { text, from } = EchoRouter.body(ctx);
+        if (typeof text !== "string") throw new BadRequest({ error: "text is required" });
+        return EchoRouter.mac(ctx, async () => EchoHandoff.get().receiveClip(text, typeof from === "string" ? from : "phone"));
+    };
+
+    static clipboardSync = (ctx: RouterContext, _: Next) => {
+        const { enabled } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => {
+            await EchoHandoff.get().setClipboardOn(enabled === true);
+            return { enabled: EchoHandoff.get().clipboardOn };
+        });
+    };
+
+    /** Files from a device, as multipart "file" parts; saved to ~/Downloads/Echo. */
+    static drop = (ctx: RouterContext, _: Next) => {
+        const raw = (ctx.request as any).files?.file;
+        const files: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+        if (!files.length) throw new BadRequest({ error: "No file came through" });
+        const { from } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () =>
+            files.map(f =>
+                EchoHandoff.get().receiveFile(
+                    f.filepath ?? f.path,
+                    f.originalFilename ?? f.name ?? "file",
+                    typeof from === "string" ? from : "phone"
+                )
+            )
+        );
+    };
+
+    static async drops(ctx: RouterContext, _: Next) {
+        return new Success(ctx, { data: EchoHandoff.get().drops() }).send();
+    }
+
+    static async dropFile(ctx: RouterContext, _: Next) {
+        const d = EchoHandoff.get().dropFile(String(ctx.request.query?.id ?? ""));
+        if (!d) throw new BadRequest({ error: "That file isn't on offer any more" });
+        ctx.response.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(d.name)}`);
+        ctx.response.set("Content-Length", String(d.size));
+        return new FileStream(ctx, d.file).send();
+    }
+
+    static dropDone = (ctx: RouterContext, _: Next) => {
+        const { id } = EchoRouter.body(ctx);
+        if (typeof id !== "string") throw new BadRequest({ error: "id is required" });
+        return EchoRouter.mac(ctx, async () => {
+            EchoHandoff.get().finish(id);
+            return { ok: true };
+        });
     };
 
     static async pushKey(ctx: RouterContext, _: Next) {

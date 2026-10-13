@@ -685,6 +685,24 @@ export class HttpRoutes {
                     { method: HttpMethod.POST, path: "notes", controller: EchoRouter.addNote },
                     { method: HttpMethod.POST, path: "notes/update", controller: EchoRouter.updateNote },
                     { method: HttpMethod.POST, path: "ai/key", controller: EchoRouter.aiKey },
+                    { method: HttpMethod.GET, path: "clipboard", controller: EchoRouter.clipboard },
+                    { method: HttpMethod.POST, path: "clipboard", controller: EchoRouter.setClipboard },
+                    { method: HttpMethod.POST, path: "clipboard/sync", controller: EchoRouter.clipboardSync },
+                    {
+                        method: HttpMethod.POST,
+                        path: "drop",
+                        controller: EchoRouter.drop,
+                        requestTimeoutMs: 30 * 60 * 1000,
+                        responseTimeoutMs: 30 * 60 * 1000
+                    },
+                    { method: HttpMethod.GET, path: "drops", controller: EchoRouter.drops },
+                    {
+                        method: HttpMethod.GET,
+                        path: "drop/file",
+                        controller: EchoRouter.dropFile,
+                        responseTimeoutMs: 30 * 60 * 1000
+                    },
+                    { method: HttpMethod.POST, path: "drop/done", controller: EchoRouter.dropDone },
                     {
                         method: HttpMethod.POST,
                         path: "catchup",
