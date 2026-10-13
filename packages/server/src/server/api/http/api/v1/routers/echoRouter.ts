@@ -3,6 +3,7 @@ import { Next } from "koa";
 import { app } from "electron";
 import axios from "axios";
 import os from "os";
+import crypto from "crypto";
 import { Server } from "@server";
 import { EchoGuard } from "@server/services/echoGuard";
 import { EchoPush } from "@server/services/echoPush";
@@ -164,6 +165,77 @@ export class EchoRouter {
     };
 
     static typingTest = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, () => EchoTyping.test());
+
+    // --- Settings, for Echo for Mac ---------------------------------------------
+
+    /** Settings Echo for Mac can change, and the kind of value each takes. */
+    private static SETTINGS: Record<string, "bool" | "string" | "port" | "mb" | "proxy"> = {
+        proxy_service: "proxy",
+        server_address: "string",
+        socket_port: "port",
+        ngrok_custom_domain: "string",
+        zrok_reserve_tunnel: "bool",
+        enable_private_api: "bool",
+        enable_ft_private_api: "bool",
+        facetime_calling: "bool",
+        auto_caffeinate: "bool",
+        echo_guard: "bool",
+        echo_nightly_restart: "bool",
+        echo_server_limit_mb: "mb",
+        echo_messages_limit_mb: "mb"
+    };
+
+    /** Tokens are write-only: you see whether one is set, never the token. */
+    private static SECRETS = ["ngrok_key", "zrok_token"];
+
+    static async settings(ctx: RouterContext, _: Next) {
+        const repo = Server().repo;
+        const data: Record<string, unknown> = {};
+        for (const k of Object.keys(EchoRouter.SETTINGS)) data[k] = repo.getConfig(k);
+        for (const k of EchoRouter.SECRETS) data[`${k}_set`] = String(repo.getConfig(k) ?? "").length > 0;
+        return new Success(ctx, { data }).send();
+    }
+
+    static setSettings = (ctx: RouterContext, _: Next) => {
+        const body = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => {
+            const changes: [string, any][] = [];
+            for (const [k, v] of Object.entries(body)) {
+                const kind = EchoRouter.SETTINGS[k] ?? (EchoRouter.SECRETS.includes(k) ? "string" : null);
+                if (!kind) throw new Error(`${k} can't be changed here`);
+                if (kind === "bool") changes.push([k, v === true || v === 1 || v === "1" || v === "true"]);
+                else if (kind === "port") {
+                    const n = Number(v);
+                    if (!Number.isInteger(n) || n < 1024 || n > 65535) throw new Error("The port must be 1024-65535");
+                    changes.push([k, n]);
+                } else if (kind === "mb") {
+                    const n = Number(v);
+                    if (!Number.isFinite(n) || n < 300 || n > 8000) throw new Error("Memory limits must be 300-8000 MB");
+                    changes.push([k, String(Math.round(n))]);
+                } else if (kind === "proxy") {
+                    if (!["cloudflare", "ngrok", "zrok", "dynamic-dns", "lan-url"].includes(String(v))) {
+                        throw new Error("Unknown address method");
+                    }
+                    changes.push([k, String(v)]);
+                } else changes.push([k, String(v ?? "").trim().slice(0, 500)]);
+            }
+            // One at a time: each change is applied by the engine as it lands.
+            for (const [k, v] of changes) await Server().repo.setConfig(k, v);
+            return { changed: changes.map(([k]) => k) };
+        });
+    };
+
+    /** A new server password (random unless one is given). Every device must be paired again after. */
+    static newPassword = (ctx: RouterContext, _: Next) => {
+        const { password } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => {
+            const next = typeof password === "string" && password.trim().length >= 8
+                ? password.trim()
+                : crypto.randomBytes(18).toString("base64url");
+            await Server().repo.setConfig("password", next);
+            return { password: next };
+        });
+    };
 
     // --- Clipboard and file drop ------------------------------------------------
 

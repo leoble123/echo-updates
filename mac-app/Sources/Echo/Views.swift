@@ -106,6 +106,7 @@ enum Pane: String, CaseIterable, Identifiable {
     case connection = "Connection"
     case features = "Features"
     case files = "Files"
+    case settings = "Settings"
     case updates = "Updates"
     case logs = "Logs"
     var id: Pane { self }
@@ -115,6 +116,7 @@ enum Pane: String, CaseIterable, Identifiable {
         case .connection: return "antenna.radiowaves.left.and.right"
         case .features: return "sparkles"
         case .files: return "folder"
+        case .settings: return "gearshape"
         case .updates: return "arrow.down.circle"
         case .logs: return "doc.text.magnifyingglass"
         }
@@ -140,6 +142,7 @@ struct MainWindow: View {
                     case .connection: ConnectionPane()
                     case .features: FeaturesPane()
                     case .files: FilesPane()
+                    case .settings: SettingsPane()
                     case .updates: UpdatesPane()
                     case .logs: LogsPane()
                     }

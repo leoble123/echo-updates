@@ -153,6 +153,52 @@ final class Brain: ObservableObject {
 
     @Published var appsCheck: [String: String] = [:]
 
+    // MARK: Engine settings
+
+    @Published var settings: [String: Any] = [:]
+    @Published var savingSettings = false
+
+    /// The server password and address, for pairing a device.
+    var pairing: (password: String, address: String)? {
+        guard let cfg = EngineConfig.read(), !status.address.isEmpty else { return nil }
+        return (cfg.password, status.address)
+    }
+
+    func loadSettings() {
+        Task {
+            if let d = try? await api?.call("GET", "/echo/settings") as? [String: Any] { settings = d }
+        }
+    }
+
+    func saveSettings(_ changes: [String: Any], done: String = "Saved.") {
+        savingSettings = true
+        Task {
+            do {
+                _ = try await api?.call("POST", "/echo/settings", body: changes, timeout: 60)
+                note = done
+            } catch {
+                note = "Couldn't save: \(error.localizedDescription)"
+            }
+            savingSettings = false
+            loadSettings()
+            refresh()
+        }
+    }
+
+    /// A new random password. Every paired device has to scan the new code.
+    func newPassword() {
+        Task {
+            do {
+                _ = try await api?.call("POST", "/echo/password", body: [:])
+                api = nil
+                note = "New password set. Scan the new pairing code on each phone and browser."
+                refresh()
+            } catch {
+                note = "Couldn't change the password: \(error.localizedDescription)"
+            }
+        }
+    }
+
     /// Runs Reminders and Notes the way the phone does, and says exactly what happened.
     func checkMacApps() {
         appsCheck = ["Reminders": "Checking…", "Notes": "Checking…"]
