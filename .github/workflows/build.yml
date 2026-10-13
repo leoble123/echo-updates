@@ -73,6 +73,21 @@ jobs:
           grep -q "Echo Guard is watching" "$LOG" || { echo "::error::Start-up didn't finish. Last log lines:"; tail -n 15 "$LOG"; exit 1; }
           grep -n "Starting HTTP service\|Echo Guard is watching" "$LOG"
           kill $PID; sleep 3; kill -9 $PID 2>/dev/null || true
+      - name: Claude SDK runs in Echo Server's own runtime
+        run: |
+          APP=$(find packages/server/releases -maxdepth 3 -name "*.app" | head -1)
+          BIN="$APP/Contents/MacOS/$(defaults read "$PWD/$APP/Contents/Info" CFBundleExecutable)"
+          SDK="$PWD/$APP/Contents/Resources/app.asar/node_modules/@anthropic-ai/sdk"
+          # Electron's own Node, reading the SDK out of the packaged app. Nothing listens on
+          # port 9, so a working SDK fails with a connection error - anything else is a bug.
+          ELECTRON_RUN_AS_NODE=1 "$BIN" -e '
+            const A = require(process.argv[1]);
+            console.log("node", process.version);
+            const c = new A.default({ apiKey: "sk-ant-test", baseURL: "http://127.0.0.1:9", maxRetries: 0 });
+            c.beta.messages.create({ model: "claude-opus-5-5", max_tokens: 1, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", messages: [{ role: "user", content: "x" }] })
+              .then(() => process.exit(2))
+              .catch(e => { console.log("SDK error as expected:", e.constructor.name); process.exit(e instanceof A.default.APIConnectionError ? 0 : 3); });
+          ' "$SDK"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

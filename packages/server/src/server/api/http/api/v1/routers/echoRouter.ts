@@ -5,6 +5,7 @@ import axios from "axios";
 import { Server } from "@server";
 import { EchoGuard } from "@server/services/echoGuard";
 import { EchoPush } from "@server/services/echoPush";
+import { EchoAI } from "@server/services/echoAI";
 import { Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
@@ -41,6 +42,42 @@ export class EchoRouter {
                 events: EchoGuard.events.slice(-15)
             }
         }).send();
+    }
+
+    /** Whether Catch me up is ready - never the key itself. */
+    static async aiStatus(ctx: RouterContext, _: Next) {
+        return new Success(ctx, { data: { configured: EchoAI.get().configured } }).send();
+    }
+
+    static async aiKey(ctx: RouterContext, _: Next) {
+        const { key } = (ctx.request.body ?? {}) as any;
+        try {
+            await EchoAI.get().setKey(typeof key === "string" ? key : "");
+        } catch (ex: any) {
+            throw new BadRequest({ error: ex?.message ?? "Bad key" });
+        }
+        return new Success(ctx, { data: { configured: EchoAI.get().configured } }).send();
+    }
+
+    static async catchUp(ctx: RouterContext, _: Next) {
+        const { chatGuid, names } = (ctx.request.body ?? {}) as any;
+        if (typeof chatGuid !== "string" || !chatGuid) throw new BadRequest({ error: "chatGuid is required" });
+        const nameMap: Record<string, string> = {};
+        if (names && typeof names === "object") {
+            for (const [k, v] of Object.entries(names)) if (typeof v === "string") nameMap[k] = v.slice(0, 60);
+        }
+        try {
+            return new Success(ctx, { data: await EchoAI.get().catchUp(chatGuid, nameMap) }).send();
+        } catch (ex: any) {
+            const status = ex?.status ?? ex?.statusCode;
+            const message =
+                status === 401
+                    ? "The Anthropic API key was rejected - check it in Your Mac on the phone"
+                    : status === 429
+                        ? "Too many requests to Claude right now - try again in a minute"
+                        : ex?.message ?? "Couldn't catch up";
+            throw new BadRequest({ error: message });
+        }
     }
 
     static async pushKey(ctx: RouterContext, _: Next) {

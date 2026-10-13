@@ -674,7 +674,16 @@ export class HttpRoutes {
                     { method: HttpMethod.POST, path: "push/subscribe", controller: EchoRouter.pushSubscribe },
                     { method: HttpMethod.POST, path: "push/unsubscribe", controller: EchoRouter.pushUnsubscribe },
                     { method: HttpMethod.POST, path: "push/test", controller: EchoRouter.pushTest },
-                    { method: HttpMethod.GET, path: "preview", controller: EchoRouter.preview }
+                    { method: HttpMethod.GET, path: "preview", controller: EchoRouter.preview },
+                    { method: HttpMethod.GET, path: "ai", controller: EchoRouter.aiStatus },
+                    { method: HttpMethod.POST, path: "ai/key", controller: EchoRouter.aiKey },
+                    {
+                        method: HttpMethod.POST,
+                        path: "catchup",
+                        controller: EchoRouter.catchUp,
+                        requestTimeoutMs: 3 * 60 * 1000,
+                        responseTimeoutMs: 3 * 60 * 1000
+                    }
                 ]
             },
             {

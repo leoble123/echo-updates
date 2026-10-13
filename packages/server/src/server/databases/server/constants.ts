@@ -64,4 +64,6 @@ export const DEFAULT_DB_ITEMS: { [key: string]: () => any } = {
     echo_server_limit_mb: () => "900",
     echo_messages_limit_mb: () => "1400",
     echo_min_free_gb: () => "10",
+    // Anthropic API key for Catch me up; set from the phone, never sent back out.
+    echo_anthropic_key: () => "",
 };
