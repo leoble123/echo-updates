@@ -72,6 +72,7 @@ import { obfuscatedHandle } from "./utils/StringUtils";
 import { AutoStartMethods } from "./databases/server/constants";
 import { MacOsInterface } from "./api/interfaces/macosInterface";
 import { EchoGuard } from "./services/echoGuard";
+import { EchoPush } from "./services/echoPush";
 import { applyEchoDefaults, underLaunchd } from "./services/echoGuard/defaults";
 
 const findProcess = require("find-process");
@@ -1136,6 +1137,11 @@ class BlueBubblesServer extends EventEmitter {
     ) {
         if (sendSocket) {
             this.httpService?.socketServer.emit(type, data);
+        }
+
+        // Echo: Web Push to Echo Web, alongside the phone notifications below.
+        if (type === NEW_MESSAGE && sendFcmMessage) {
+            EchoPush.get().onMessage(data);
         }
 
         // Send notification to devices

@@ -40,6 +40,7 @@ import { FindMyRouter } from "./routers/findmyRouter";
 import { getLogger } from "@server/lib/logging/Loggable";
 import { WebhookRouter } from "./routers/webhookRouter";
 import { WebhookValidator } from "./validators/webhookValidator";
+import { EchoRouter } from "./routers/echoRouter";
 
 export class HttpRoutes {
     static version = 1;
@@ -661,6 +662,19 @@ export class HttpRoutes {
                         validators: [SettingsValidator.validateDelete],
                         controller: SettingsRouter.delete
                     }
+                ]
+            },
+            {
+                name: "Echo",
+                middleware: HttpRoutes.protected,
+                prefix: "echo",
+                routes: [
+                    { method: HttpMethod.GET, path: "status", controller: EchoRouter.status },
+                    { method: HttpMethod.GET, path: "push/key", controller: EchoRouter.pushKey },
+                    { method: HttpMethod.POST, path: "push/subscribe", controller: EchoRouter.pushSubscribe },
+                    { method: HttpMethod.POST, path: "push/unsubscribe", controller: EchoRouter.pushUnsubscribe },
+                    { method: HttpMethod.POST, path: "push/test", controller: EchoRouter.pushTest },
+                    { method: HttpMethod.GET, path: "preview", controller: EchoRouter.preview }
                 ]
             },
             {

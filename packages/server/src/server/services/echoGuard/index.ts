@@ -30,6 +30,43 @@ export class EchoGuard extends Loggable {
 
     private strikes = { self: 0, messages: 0, api: 0, helper: 0 };
 
+    /** What Echo Guard has done recently, newest last (for the Echo apps' status screen). */
+    static events: { at: number; text: string }[] = [];
+
+    private static get eventsFile() {
+        return path.join(FileSystem.baseDir, "echo", "guard-events.json");
+    }
+
+    /** Kept on disk, so a relaunch Echo Guard caused still shows up after it. */
+    static loadEvents() {
+        try {
+            EchoGuard.events = JSON.parse(fs.readFileSync(EchoGuard.eventsFile, "utf8")).slice(-30);
+        } catch {
+            EchoGuard.events = [];
+        }
+    }
+
+    private note(text: string) {
+        this.log.info(text);
+        EchoGuard.events.push({ at: Date.now(), text });
+        if (EchoGuard.events.length > 30) EchoGuard.events.shift();
+        try {
+            fs.mkdirSync(path.dirname(EchoGuard.eventsFile), { recursive: true });
+            fs.writeFileSync(EchoGuard.eventsFile, JSON.stringify(EchoGuard.events));
+        } catch {
+            // Only history.
+        }
+    }
+
+    /** The latest memory reading, in MB. */
+    static lastReading: {
+        server: number;
+        messages: number;
+        findMy: number;
+        faceTime: number;
+        freeDiskGb: number;
+    } = null;
+
     /** Find My is left alone for a while after the server opens it to refresh locations. */
     static findMyBusyUntil = 0;
 
@@ -48,6 +85,8 @@ export class EchoGuard extends Loggable {
 
     start() {
         if (this.timer) return;
+        this.startedAt = Date.now();
+        EchoGuard.loadEvents();
         this.log.info("Echo Guard is watching the server.");
         this.timer = setInterval(() => {
             this.tick().catch(ex => this.log.debug(`Check failed: ${ex?.message ?? String(ex)}`));
@@ -70,11 +109,19 @@ export class EchoGuard extends Loggable {
             return this.relaunch(`server memory stayed at ${Math.round(selfMb)} MB`);
         }
 
+        EchoGuard.lastReading = {
+            server: Math.round(selfMb),
+            messages: Math.round(procs.get("Messages") ?? 0),
+            findMy: Math.round(procs.get("FindMy") ?? 0),
+            faceTime: Math.round(procs.get("FaceTime") ?? 0),
+            freeDiskGb: this.freeDiskGb()
+        };
+
         // 2. Messages. Killing it is enough: the Private API loop starts it again with the helper.
         const messagesMb = procs.get("Messages") ?? 0;
         if (this.strike("messages", messagesMb > this.limit("echo_messages_limit_mb", 1400), 3)) {
             if (!this.sending()) {
-                this.log.info(`Restarting Messages (using ${Math.round(messagesMb)} MB)`);
+                this.note(`Restarting Messages (using ${Math.round(messagesMb)} MB)`);
                 await FileSystem.execShellCommand(`killall Messages`).catch((): null => null);
                 this.strikes.messages = 0;
             }
@@ -94,22 +141,22 @@ export class EchoGuard extends Loggable {
         // 5. Apps that only cost memory when they sit in the background.
         const front = await this.frontmost();
         if (procs.has("FindMy") && front !== "FindMy" && Date.now() > EchoGuard.findMyBusyUntil) {
-            this.log.info("Quitting Find My (left open in the background)");
+            this.note("Quitting Find My (left open in the background)");
             await FileSystem.execShellCommand(`osascript -e 'quit app "FindMy"'`).catch((): null => null);
         }
         const ft = Server().repo.getConfig("enable_ft_private_api") as boolean;
         if (!ft && procs.has("FaceTime") && front !== "FaceTime") {
-            this.log.info("Quitting FaceTime (left open in the background)");
+            this.note("Quitting FaceTime (left open in the background)");
             await FileSystem.execShellCommand(`osascript -e 'quit app "FaceTime"'`).catch((): null => null);
         }
 
         // 6. Disk space.
-        const freeGb = this.freeDiskGb();
+        const freeGb = EchoGuard.lastReading.freeDiskGb;
         if (freeGb !== null && freeGb < this.limit("echo_min_free_gb", 10)) {
             const cleared = this.clearCaches();
             if (cleared > 0) {
                 const mb = Math.round(cleared / 1e6);
-                this.log.info(`Disk low (${freeGb.toFixed(1)} GB free): cleared ${mb} MB of caches`);
+                this.note(`Disk low (${freeGb.toFixed(1)} GB free): cleared ${mb} MB of caches`);
             }
         }
 
@@ -133,7 +180,7 @@ export class EchoGuard extends Loggable {
     }
 
     private async relaunch(reason: string) {
-        this.log.info(`Relaunching: ${reason}`);
+        this.note(`Relaunching: ${reason}`);
         this.stop();
         await Server().relaunch();
     }
@@ -186,7 +233,7 @@ export class EchoGuard extends Loggable {
         });
     }
 
-    private freeDiskGb(): number | null {
+    freeDiskGb(): number | null {
         try {
             const st = (fs as any).statfsSync?.(os.homedir());
             if (!st) return null;

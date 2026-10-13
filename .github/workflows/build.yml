@@ -85,3 +85,9 @@ jobs:
         run: |
           gh release create "${{ steps.pack.outputs.tag }}" "${{ steps.pack.outputs.zip }}" "${{ steps.pack.outputs.zip }}.sha256" \
             --target "$GITHUB_SHA" --prerelease --title "Echo Server ${{ steps.pack.outputs.tag }}" --notes "Built from $GITHUB_SHA"
+      - name: Retire known-bad builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 1: stock BlueBubbles test build. 2: crashed at start (import cycle).
+          for t in server-1.9.9-1 server-1.9.9-2; do gh release delete "$t" --cleanup-tag -y 2>/dev/null || true; done
