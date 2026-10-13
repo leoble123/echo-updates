@@ -53,7 +53,8 @@ final class Brain: ObservableObject {
         Task { await checkForUpdates() }
         // Updates are looked for every few hours; installed overnight when automatic.
         Timer.scheduledTimer(withTimeInterval: 3 * 3600, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.checkForUpdates() }
+            guard let brain = self else { return }
+            Task { @MainActor in await brain.checkForUpdates() }
         }
     }
 
@@ -62,7 +63,8 @@ final class Brain: ObservableObject {
         // Quick while you're looking, relaxed otherwise.
         let every: TimeInterval = windowOpen ? 4 : 30
         timer = Timer.scheduledTimer(withTimeInterval: every, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            guard let brain = self else { return }
+            Task { @MainActor in brain.refresh() }
         }
     }
 
@@ -207,19 +209,21 @@ final class Brain: ObservableObject {
             let chunk = String(data: h.availableData, encoding: .utf8) ?? ""
             // Progress bars redraw with \r; keep the text readable.
             let clean = chunk.replacingOccurrences(of: "\r", with: "\n")
-            Task { @MainActor in self?.updateLog += clean }
+            guard let brain = self else { return }
+            Task { @MainActor in brain.updateLog += clean }
         }
         p.terminationHandler = { [weak self] proc in
             pipe.fileHandleForReading.readabilityHandler = nil
+            let status = proc.terminationStatus
+            guard let brain = self else { return }
             Task { @MainActor in
-                guard let self else { return }
-                self.updating = false
-                self.installedBuild = EngineService.installedBuild
-                if proc.terminationStatus == 0 {
-                    self.notify("Echo is up to date", "Build \(self.installedBuild.map(String.init) ?? "?") is running.")
-                    self.relaunchIfReplaced()
+                brain.updating = false
+                brain.installedBuild = EngineService.installedBuild
+                if status == 0 {
+                    brain.notify("Echo is up to date", "Build \(brain.installedBuild.map(String.init) ?? "?") is running.")
+                    brain.relaunchIfReplaced()
                 } else {
-                    self.note = "The update didn't finish - the old version is still running."
+                    brain.note = "The update didn't finish - the old version is still running."
                 }
             }
         }

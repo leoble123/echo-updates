@@ -108,7 +108,7 @@ enum Pane: String, CaseIterable, Identifiable {
     case files = "Files"
     case updates = "Updates"
     case logs = "Logs"
-    var id: String { rawValue }
+    var id: Pane { self }
     var symbol: String {
         switch self {
         case .overview: return "gauge.with.dots.needle.67percent"
@@ -213,11 +213,11 @@ struct OverviewPane: View {
             if s.events.isEmpty {
                 Text("Nothing has needed fixing.").foregroundStyle(.secondary)
             } else {
-                ForEach(Array(s.events.suffix(8).reversed().enumerated()), id: \.offset) { _, e in
+                ForEach(Array(s.events.suffix(8).reversed().enumerated()), id: \.offset) { item in
                     HStack(alignment: .top) {
-                        Text(e.1)
+                        Text(item.element.1)
                         Spacer()
-                        Text(ago(e.0)).foregroundStyle(.secondary).font(.caption)
+                        Text(ago(item.element.0)).foregroundStyle(.secondary).font(.caption)
                     }
                 }
             }
