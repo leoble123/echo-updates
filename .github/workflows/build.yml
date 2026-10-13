@@ -76,7 +76,9 @@ jobs:
       - name: Reminders & Notes scripts compile (and run, where CI allows)
         run: |
           mkdir -p jxa
-          npx --yes typescript@5.4.5 tsc --module commonjs --target es2019 --outDir jxa packages/server/src/server/services/echoMacApps/scripts.ts
+          # From outside the repo: npm rejects the root package.json's devEngines.
+          (cd "$RUNNER_TEMP" && npx --yes -p typescript@5.4.5 tsc --module commonjs --target es2019 \
+            --outDir "$GITHUB_WORKSPACE/jxa" "$GITHUB_WORKSPACE/packages/server/src/server/services/echoMacApps/scripts.ts")
           node -e '
             const fs = require("fs"); const s = require("./jxa/scripts.js");
             for (const [k, v] of Object.entries(s)) fs.writeFileSync("jxa/" + k + ".js", v);
