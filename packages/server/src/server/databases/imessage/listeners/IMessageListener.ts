@@ -6,7 +6,6 @@ import { Sema } from "async-sema";
 import { IMessageCache, IMessagePoller } from "../pollers";
 import { MessageRepository } from "..";
 import { waitMs } from "@server/helpers/utils";
-import { DebounceSubsequentWithWait } from "@server/lib/decorators/DebounceDecorator";
 
 export class IMessageListener extends Loggable {
     tag = "IMessageListener";
@@ -27,6 +26,15 @@ export class IMessageListener extends Loggable {
 
     lastCheck = 0;
 
+    // Echo: change detection that never drops a wake-up.
+    /** A check is queued or running. */
+    private checking = false;
+    /** Something changed while a check ran: run again straight after. */
+    private dirty = false;
+    /** Size and mtime of the watched files at the last look, for the safety-net timer. */
+    private fingerprint = "";
+    private safetyNet: NodeJS.Timeout = null;
+
     constructor({ filePaths, repo, cache }: { filePaths: string[], repo: MessageRepository, cache: IMessageCache }) {
         super();
 
@@ -40,7 +48,23 @@ export class IMessageListener extends Loggable {
 
     stop() {
         this.stopped = true;
+        if (this.safetyNet) clearInterval(this.safetyNet);
+        this.safetyNet = null;
         this.removeAllListeners();
+    }
+
+    /** The watched files' sizes and times, cheaply - a change here means Messages wrote something. */
+    private stamp(): string {
+        return this.filePaths
+            .map(f => {
+                try {
+                    const s = fs.statSync(f);
+                    return `${s.size}:${s.mtimeMs}`;
+                } catch {
+                    return "-";
+                }
+            })
+            .join("|");
     }
 
     addPoller(poller: IMessagePoller) {
@@ -79,10 +103,52 @@ export class IMessageListener extends Loggable {
         });
 
         this.watcher.start();
+
+        // macOS file events can arrive late or not at all for the WAL file; a
+        // stat a second is nothing, and catches any write the watcher missed.
+        this.fingerprint = this.stamp();
+        this.safetyNet = setInterval(() => {
+            if (this.stopped) return;
+            const now = this.stamp();
+            if (now !== this.fingerprint) this.requestCheck();
+        }, 1000);
     }
 
-    @DebounceSubsequentWithWait('IMessageListener.handleChangeEvent', 500)
-    async handleChangeEvent(event: FileChangeEvent) {
+    /**
+     * A write happened. Waits a moment so a burst of writes (one message is
+     * several) is read in one go, then checks. A write that lands while a
+     * check is already running is never folded into it - that check may
+     * already have read past it - but runs another check straight after.
+     * The old debounce did fold it in, which is what held messages back
+     * until the next one arrived and then delivered them all at once.
+     */
+    requestCheck() {
+        if (this.stopped) return;
+        if (this.checking) {
+            this.dirty = true;
+            return;
+        }
+        this.checking = true;
+        setTimeout(() => this.runChecks(), 150);
+    }
+
+    private async runChecks() {
+        try {
+            do {
+                this.dirty = false;
+                this.fingerprint = this.stamp();
+                await this.check();
+            } while (this.dirty && !this.stopped);
+        } finally {
+            this.checking = false;
+        }
+    }
+
+    async handleChangeEvent(_event: FileChangeEvent) {
+        this.requestCheck();
+    }
+
+    private async check() {
         await this.processLock.acquire();
         try {
             const now = Date.now();
