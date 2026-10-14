@@ -153,6 +153,16 @@ final class Brain: ObservableObject {
 
     @Published var appsCheck: [String: String] = [:]
 
+    // MARK: Backups
+
+    @Published var backupInfo: [String: Any] = [:]
+
+    func loadBackupInfo() {
+        Task {
+            if let d = try? await api?.call("GET", "/echo/backup/info", timeout: 60) as? [String: Any] { backupInfo = d }
+        }
+    }
+
     // MARK: Engine settings
 
     @Published var settings: [String: Any] = [:]

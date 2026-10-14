@@ -19,6 +19,8 @@ enum Paths {
 struct EngineConfig {
     var password: String
     var port: Int
+    /** The key backups are encrypted with; read here, never over the network. */
+    var backupKey: String = ""
 
     static func read() -> EngineConfig? {
         var db: OpaquePointer?
@@ -31,7 +33,7 @@ struct EngineConfig {
         sqlite3_busy_timeout(db, 2000)
         var values: [String: String] = [:]
         var stmt: OpaquePointer?
-        let sql = "SELECT name, value FROM config WHERE name IN ('password', 'socket_port')"
+        let sql = "SELECT name, value FROM config WHERE name IN ('password', 'socket_port', 'echo_backup_key')"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -40,7 +42,7 @@ struct EngineConfig {
             values[String(cString: n)] = v
         }
         guard let password = values["password"], !password.isEmpty else { return nil }
-        return EngineConfig(password: password, port: Int(values["socket_port"] ?? "") ?? 1234)
+        return EngineConfig(password: password, port: Int(values["socket_port"] ?? "") ?? 1234, backupKey: values["echo_backup_key"] ?? "")
     }
 }
 

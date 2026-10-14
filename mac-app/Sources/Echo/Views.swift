@@ -106,6 +106,7 @@ enum Pane: String, CaseIterable, Identifiable {
     case connection = "Connection"
     case features = "Features"
     case files = "Files"
+    case backups = "Backups"
     case settings = "Settings"
     case updates = "Updates"
     case logs = "Logs"
@@ -116,6 +117,7 @@ enum Pane: String, CaseIterable, Identifiable {
         case .connection: return "antenna.radiowaves.left.and.right"
         case .features: return "sparkles"
         case .files: return "folder"
+        case .backups: return "externaldrive.badge.timemachine"
         case .settings: return "gearshape"
         case .updates: return "arrow.down.circle"
         case .logs: return "doc.text.magnifyingglass"
@@ -142,6 +144,7 @@ struct MainWindow: View {
                     case .connection: ConnectionPane()
                     case .features: FeaturesPane()
                     case .files: FilesPane()
+                    case .backups: BackupsPane()
                     case .settings: SettingsPane()
                     case .updates: UpdatesPane()
                     case .logs: LogsPane()
@@ -376,5 +379,46 @@ struct LogsPane: View {
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .onAppear { text = brain.recentLog() }
+    }
+}
+
+struct BackupsPane: View {
+    @EnvironmentObject var brain: Brain
+    @State private var showKey = false
+
+    private func bytes(_ v: Any?) -> String {
+        let n = (v as? NSNumber)?.int64Value ?? 0
+        return ByteCountFormatter.string(fromByteCount: n, countStyle: .file)
+    }
+
+    var body: some View {
+        Text("Backups").font(.largeTitle.weight(.bold))
+            .onAppear { brain.loadBackupInfo() }
+        Card(title: "WHAT GETS BACKED UP") {
+            Row(title: "Messages database", value: bytes(brain.backupInfo["dbBytes"]))
+            Row(title: "Attachments", value: "\((brain.backupInfo["attachmentsCount"] as? NSNumber)?.intValue ?? 0) files · \(bytes(brain.backupInfo["attachmentsBytes"]))")
+            Row(title: "Last pulled by your PC", value: (brain.backupInfo["lastPulled"] as? NSNumber).map { ago(Date(timeIntervalSince1970: $0.doubleValue / 1000)) } ?? "Never")
+            Text("Your PC pulls these every night: a fresh copy of the messages database, plus any new attachments. Everything is encrypted here before it leaves this Mac. To set it up, open Echo on the PC → Your Mac → Back Up to This PC.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Card(title: "RECOVERY KEY") {
+            let key = EngineConfig.read()?.backupKey ?? ""
+            if key.isEmpty {
+                Text("Made the first time the engine starts with backups. Check back in a minute.").foregroundStyle(.secondary)
+            } else {
+                Text(showKey ? key : String(repeating: "•", count: 32))
+                    .font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                HStack {
+                    Button(showKey ? "Hide" : "Show Key") { showKey.toggle() }
+                    Button("Copy Key") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(key, forType: .string)
+                        brain.note = "Key copied. Keep it in a password manager - without it the backups can't be opened."
+                    }
+                }
+                Text("The backups on your PC are locked with this key. If this Mac is ever lost, you'll need it to restore them - save it in a password manager now. It never leaves this Mac on its own.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }
