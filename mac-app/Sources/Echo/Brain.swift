@@ -105,7 +105,8 @@ final class Brain: ObservableObject {
     /// Down for two minutes: start it again, at most every five. launchd
     /// already restarts a crash; this catches the rest (stopped, hung).
     private func heal(running: Bool) {
-        guard let since = downSince, Date().timeIntervalSince(since) > 120 else { return }
+        // An update stops and starts the engine itself.
+        guard !updating, let since = downSince, Date().timeIntervalSince(since) > 120 else { return }
         if let healed = healedAt, Date().timeIntervalSince(healed) < 300 { return }
         healedAt = Date()
         EngineService.restart()

@@ -13,7 +13,6 @@ import { EchoHandoff } from "@server/services/echoHandoff";
 import { EchoTyping } from "@server/services/echoTyping";
 import { EchoSearch } from "@server/services/echoSearch";
 import { EchoBackup } from "@server/services/echoBackup";
-import { EchoSchedule } from "@server/services/echoSchedule";
 import { EchoRemote } from "@server/services/echoRemote";
 import { wrapped } from "@server/services/echoWrapped";
 import fs from "fs";
@@ -184,36 +183,6 @@ export class EchoRouter {
         });
         return new Success(ctx, { data: { hits, index: EchoSearch.get().status } }).send();
     }
-
-    // --- Scheduled messages -------------------------------------------------------
-
-    static async scheduled(ctx: RouterContext, _: Next) {
-        const chat = ctx.request.query?.chat ? String(ctx.request.query.chat) : undefined;
-        return new Success(ctx, { data: EchoSchedule.get().list(chat) }).send();
-    }
-
-    static schedule = (ctx: RouterContext, _: Next) => {
-        const { chatGuid, text, at } = EchoRouter.body(ctx);
-        return EchoRouter.mac(ctx, async () => EchoSchedule.get().add(String(chatGuid ?? ""), String(text ?? ""), Number(at)));
-    };
-
-    static updateScheduled = (ctx: RouterContext, _: Next) => {
-        const { id, text, at } = EchoRouter.body(ctx);
-        return EchoRouter.mac(ctx, async () =>
-            EchoSchedule.get().update(String(id ?? ""), {
-                text: typeof text === "string" ? text : undefined,
-                at: at === undefined ? undefined : Number(at)
-            })
-        );
-    };
-
-    static cancelScheduled = (ctx: RouterContext, _: Next) => {
-        const { id } = EchoRouter.body(ctx);
-        return EchoRouter.mac(ctx, async () => {
-            EchoSchedule.get().cancel(String(id ?? ""));
-            return { ok: true };
-        });
-    };
 
     // --- Mac remote --------------------------------------------------------------
 

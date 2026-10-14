@@ -276,6 +276,14 @@ export class ScheduledMessagesService extends Loggable {
         const now = new Date();
         const diff = scheduledMessage.scheduledFor.getTime() - now.getTime();
 
+        // Echo: due while the engine was restarting (its nightly restart, an
+        // update) - send it now rather than give up; it's only a little late.
+        if (diff <= 0 && -diff < 6 * 60 * 60 * 1000) {
+            this.log.info(`Sending late (${Math.round(-diff / 1000)}s): ${scheduledMessage.toString()}`);
+            this.timers[String(scheduledMessage.id)] = setTimeout(() => this.sendScheduledMessage(scheduledMessage), 5000);
+            return;
+        }
+
         // If the schedule has passed, do not schedule it.
         if (diff <= 0) {
             this.log.info(`Expiring: ${scheduledMessage.toString()}`);

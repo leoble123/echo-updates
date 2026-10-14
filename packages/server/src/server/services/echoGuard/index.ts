@@ -172,7 +172,12 @@ export class EchoGuard extends Loggable {
 
         // Reminders and Notes, when Echo opened them to answer the phone: quit once idle.
         for (const [name, lastUsed] of EchoMacApps.openedByEcho) {
-            if (Date.now() - lastUsed < 2 * 60_000 || front === name) continue;
+            // In front means you're using it: it's yours now, and Echo leaves it alone.
+            if (front === name) {
+                EchoMacApps.openedByEcho.delete(name);
+                continue;
+            }
+            if (Date.now() - lastUsed < 2 * 60_000) continue;
             EchoMacApps.openedByEcho.delete(name);
             await FileSystem.execShellCommand(`osascript -e 'quit app "${name}"'`).catch((): null => null);
             this.log.debug(`Quit ${name} (opened by Echo, now idle)`);
