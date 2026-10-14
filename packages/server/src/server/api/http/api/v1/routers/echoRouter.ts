@@ -271,6 +271,7 @@ export class EchoRouter {
         facetime_calling: "bool",
         auto_caffeinate: "bool",
         echo_guard: "bool",
+        echo_auto_codes: "bool",
         echo_nightly_restart: "bool",
         echo_server_limit_mb: "mb",
         echo_messages_limit_mb: "mb"

@@ -67,6 +67,7 @@ export const DEFAULT_DB_ITEMS: { [key: string]: () => any } = {
     // Anthropic API key for Catch me up; set from the phone, never sent back out.
     echo_anthropic_key: () => "",
     echo_clipboard_sync: (): boolean => false,
+    echo_auto_codes: (): boolean => true,
     // Backups to the PC: the key (made on first use, never sent to the PC) and when one last finished.
     echo_backup_key: () => "",
     echo_backup_last: () => "0",

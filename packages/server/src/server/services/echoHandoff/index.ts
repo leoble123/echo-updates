@@ -108,6 +108,17 @@ export class EchoHandoff extends Loggable {
         Server().emitMessage(event, data, "normal", false);
     }
 
+    /** Something Echo itself put on the clipboard: not news to the watcher. */
+    noteCopied(text: string) {
+        this.seen = text;
+    }
+
+    /** Sends a clip out to every device, as if copied on the Mac. */
+    announceClip(clip: Clip) {
+        this.last = clip;
+        this.announce(CLIPBOARD_EVENT, clip);
+    }
+
     // --- Clipboard ------------------------------------------------------------
 
     private watchClipboard() {

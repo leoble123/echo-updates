@@ -94,6 +94,7 @@ struct SettingsPane: View {
             toggle("FaceTime Private API (calls from Echo)", "enable_ft_private_api")
             toggle("FaceTime calling", "facetime_calling")
             toggle("Keep this Mac awake", "auto_caffeinate")
+            toggle("Copy login codes automatically", "echo_auto_codes")
         }
 
         Card(title: "ECHO GUARD") {

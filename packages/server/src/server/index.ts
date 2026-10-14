@@ -73,6 +73,7 @@ import { AutoStartMethods } from "./databases/server/constants";
 import { MacOsInterface } from "./api/interfaces/macosInterface";
 import { EchoGuard } from "./services/echoGuard";
 import { EchoPush } from "./services/echoPush";
+import { EchoCodes } from "./services/echoCodes";
 import { EchoHandoff } from "./services/echoHandoff";
 import { EchoSearch } from "./services/echoSearch";
 import { EchoBackup } from "./services/echoBackup";
@@ -1154,6 +1155,7 @@ class BlueBubblesServer extends EventEmitter {
         // Echo: Web Push to Echo Web, alongside the phone notifications below.
         if (type === NEW_MESSAGE && sendFcmMessage) {
             EchoPush.get().onMessage(data);
+            EchoCodes.get().onMessage(data);
         }
 
         // Send notification to devices
