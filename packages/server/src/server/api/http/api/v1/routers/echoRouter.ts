@@ -13,6 +13,10 @@ import { EchoHandoff } from "@server/services/echoHandoff";
 import { EchoTyping } from "@server/services/echoTyping";
 import { EchoSearch } from "@server/services/echoSearch";
 import { EchoBackup } from "@server/services/echoBackup";
+import { EchoSchedule } from "@server/services/echoSchedule";
+import { EchoRemote } from "@server/services/echoRemote";
+import { wrapped } from "@server/services/echoWrapped";
+import fs from "fs";
 import { FileStream, Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
@@ -180,6 +184,78 @@ export class EchoRouter {
         });
         return new Success(ctx, { data: { hits, index: EchoSearch.get().status } }).send();
     }
+
+    // --- Scheduled messages -------------------------------------------------------
+
+    static async scheduled(ctx: RouterContext, _: Next) {
+        const chat = ctx.request.query?.chat ? String(ctx.request.query.chat) : undefined;
+        return new Success(ctx, { data: EchoSchedule.get().list(chat) }).send();
+    }
+
+    static schedule = (ctx: RouterContext, _: Next) => {
+        const { chatGuid, text, at } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => EchoSchedule.get().add(String(chatGuid ?? ""), String(text ?? ""), Number(at)));
+    };
+
+    static updateScheduled = (ctx: RouterContext, _: Next) => {
+        const { id, text, at } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () =>
+            EchoSchedule.get().update(String(id ?? ""), {
+                text: typeof text === "string" ? text : undefined,
+                at: at === undefined ? undefined : Number(at)
+            })
+        );
+    };
+
+    static cancelScheduled = (ctx: RouterContext, _: Next) => {
+        const { id } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => {
+            EchoSchedule.get().cancel(String(id ?? ""));
+            return { ok: true };
+        });
+    };
+
+    // --- Mac remote --------------------------------------------------------------
+
+    static macState = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, () => EchoRemote.get().state());
+
+    static macAction = (ctx: RouterContext, _: Next) => {
+        const b = EchoRouter.body(ctx);
+        const r = EchoRemote.get();
+        return EchoRouter.mac(ctx, async () => {
+            switch (b.action) {
+                case "lock": await r.lock(); break;
+                case "volume": await r.setVolume(Number(b.value)); break;
+                case "mute": await r.mute(b.value === true); break;
+                case "playpause": case "next": case "previous": await r.media(b.action); break;
+                case "open": await r.open(String(b.value ?? "")); break;
+                case "say": await r.say(String(b.value ?? "")); break;
+                default: throw new Error("Unknown action");
+            }
+            return r.state();
+        });
+    };
+
+    static async macScreenshot(ctx: RouterContext, _: Next) {
+        let file: string;
+        try {
+            file = await EchoRemote.get().screenshot();
+        } catch (ex: any) {
+            throw new BadRequest({ error: ex?.message ?? "Couldn't take a screenshot" });
+        }
+        const stream = fs.createReadStream(file);
+        const cleanup = (): void => fs.unlink(file, (): void => undefined);
+        stream.on("close", cleanup);
+        ctx.status = 200;
+        ctx.set("Content-Type", "image/jpeg");
+        ctx.set("Cache-Control", "no-store");
+        ctx.body = stream;
+    }
+
+    // --- Echo Wrapped ---------------------------------------------------------------
+
+    static wrapped = (ctx: RouterContext, _: Next) =>
+        EchoRouter.mac(ctx, async () => wrapped(Number(ctx.request.query?.days) || 365));
 
     // --- Backups to the PC --------------------------------------------------------
 
