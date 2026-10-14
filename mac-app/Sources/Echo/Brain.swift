@@ -256,6 +256,80 @@ final class Brain: ObservableObject {
         }
     }
 
+    // MARK: Your phone
+
+    struct PhoneInfo {
+        var battery: Int?
+        var charging: Bool
+        var signal: Int?
+        var network: String
+        var carrier: String?
+        var hotspot: Bool?
+        var name: String?
+        var at: Date
+    }
+
+    struct PhoneNote: Identifiable {
+        let id: String
+        let appName: String
+        let title: String
+        let text: String
+        let at: Date
+    }
+
+    @Published var phone: PhoneInfo?
+    @Published var phoneNotes: [PhoneNote] = []
+
+    /// The phone as it last reported in (Echo on Android, Settings → Your Computer).
+    func refreshPhone() async {
+        guard let r = try? await api?.call("GET", "/echo/phone") as? [String: Any] else { return }
+        if let s = r["state"] as? [String: Any] {
+            phone = PhoneInfo(
+                battery: (s["battery"] as? NSNumber)?.intValue,
+                charging: (s["charging"] as? Bool) ?? false,
+                signal: (s["signal"] as? NSNumber)?.intValue,
+                network: (s["network"] as? String) ?? "none",
+                carrier: s["carrier"] as? String,
+                hotspot: s["hotspot"] as? Bool,
+                name: s["name"] as? String,
+                at: Date(timeIntervalSince1970: ((s["at"] as? NSNumber)?.doubleValue ?? 0) / 1000)
+            )
+        } else {
+            phone = nil
+        }
+        phoneNotes = ((r["notifications"] as? [[String: Any]]) ?? []).compactMap { n in
+            guard let id = n["id"] as? String else { return nil }
+            return PhoneNote(
+                id: id,
+                appName: (n["appName"] as? String) ?? "",
+                title: (n["title"] as? String) ?? "",
+                text: (n["text"] as? String) ?? "",
+                at: Date(timeIntervalSince1970: ((n["at"] as? NSNumber)?.doubleValue ?? 0) / 1000)
+            )
+        }
+    }
+
+    /// Find My Phone: full volume, even on silent, for a minute.
+    func ringPhone(stop: Bool = false) {
+        Task {
+            do {
+                _ = try await api?.call("POST", "/echo/phone/ring", body: ["stop": stop, "from": "mac"])
+                note = stop ? "Stopped." : "Ringing your phone."
+            } catch {
+                note = error.localizedDescription
+            }
+        }
+    }
+
+    /// Dismissed here, gone on the phone too. Nil clears them all.
+    func dismissPhoneNote(_ id: String?) {
+        phoneNotes = id.map { i in phoneNotes.filter { $0.id != i } } ?? []
+        Task {
+            let body: [String: Any] = id.map { ["id": $0] } ?? ["all": true]
+            _ = try? await api?.call("POST", "/echo/phone/notification/removed", body: body)
+        }
+    }
+
     // MARK: Updates
 
     /// The newest engine build on GitHub (releases tagged server-<version>-<build>).

@@ -710,6 +710,11 @@ export class HttpRoutes {
                     { method: HttpMethod.GET, path: "clipboard", controller: EchoRouter.clipboard },
                     { method: HttpMethod.POST, path: "clipboard", controller: EchoRouter.setClipboard },
                     { method: HttpMethod.POST, path: "clipboard/sync", controller: EchoRouter.clipboardSync },
+                    { method: HttpMethod.GET, path: "phone", controller: EchoRouter.phone },
+                    { method: HttpMethod.POST, path: "phone/state", controller: EchoRouter.phoneState },
+                    { method: HttpMethod.POST, path: "phone/notification", controller: EchoRouter.phoneNotification },
+                    { method: HttpMethod.POST, path: "phone/notification/removed", controller: EchoRouter.phoneNotificationRemoved },
+                    { method: HttpMethod.POST, path: "phone/ring", controller: EchoRouter.phoneRing },
                     {
                         method: HttpMethod.POST,
                         path: "drop",

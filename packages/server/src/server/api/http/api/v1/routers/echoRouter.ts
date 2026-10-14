@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { Server } from "@server";
 import { EchoGuard } from "@server/services/echoGuard";
 import { EchoPush } from "@server/services/echoPush";
+import { EchoPhone } from "@server/services/echoPhone";
 import { EchoAI } from "@server/services/echoAI";
 import { EchoMacApps } from "@server/services/echoMacApps";
 import { EchoHandoff } from "@server/services/echoHandoff";
@@ -272,6 +273,7 @@ export class EchoRouter {
         auto_caffeinate: "bool",
         echo_guard: "bool",
         echo_auto_codes: "bool",
+        echo_phone_notifications_mac: "bool",
         echo_nightly_restart: "bool",
         echo_server_limit_mb: "mb",
         echo_messages_limit_mb: "mb"
@@ -335,6 +337,35 @@ export class EchoRouter {
         const h = EchoHandoff.get();
         return new Success(ctx, { data: { enabled: h.clipboardOn, last: h.last } }).send();
     }
+
+    // --- Your phone, on your computers -------------------------------------------
+
+    static phone = (ctx: RouterContext, _: Next) =>
+        EchoRouter.mac(ctx, async () => ({ state: EchoPhone.get().state, notifications: EchoPhone.get().notifications }));
+
+    static phoneState = (ctx: RouterContext, _: Next) => {
+        const b = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => EchoPhone.get().report(b));
+    };
+
+    static phoneNotification = (ctx: RouterContext, _: Next) => {
+        const b = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => EchoPhone.get().notify(b));
+    };
+
+    static phoneNotificationRemoved = (ctx: RouterContext, _: Next) => {
+        const { id, all } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => {
+            if (all === true) EchoPhone.get().clearAll();
+            else EchoPhone.get().remove(String(id ?? ""));
+            return { ok: true };
+        });
+    };
+
+    static phoneRing = (ctx: RouterContext, _: Next) => {
+        const { stop, from } = EchoRouter.body(ctx);
+        return EchoRouter.mac(ctx, async () => EchoPhone.get().ring(stop === true, typeof from === "string" ? from.slice(0, 40) : "computer"));
+    };
 
     static setClipboard = (ctx: RouterContext, _: Next) => {
         const { text, from } = EchoRouter.body(ctx);

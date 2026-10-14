@@ -106,6 +106,7 @@ enum Pane: String, CaseIterable, Identifiable {
     case connection = "Connection"
     case features = "Features"
     case files = "Files"
+    case phone = "Your Phone"
     case backups = "Backups"
     case settings = "Settings"
     case updates = "Updates"
@@ -117,6 +118,7 @@ enum Pane: String, CaseIterable, Identifiable {
         case .connection: return "antenna.radiowaves.left.and.right"
         case .features: return "sparkles"
         case .files: return "folder"
+        case .phone: return "iphone"
         case .backups: return "externaldrive.badge.timemachine"
         case .settings: return "gearshape"
         case .updates: return "arrow.down.circle"
@@ -144,6 +146,7 @@ struct MainWindow: View {
                     case .connection: ConnectionPane()
                     case .features: FeaturesPane()
                     case .files: FilesPane()
+                    case .phone: PhonePane()
                     case .backups: BackupsPane()
                     case .settings: SettingsPane()
                     case .updates: UpdatesPane()
@@ -334,6 +337,76 @@ struct FilesPane: View {
         Card(title: "BETWEEN THIS MAC AND YOUR DEVICES") {
             Text("Files sent from your phone or Echo Web land in Downloads/Echo. Put files in Downloads/Echo/Send to Phone and they go to your phone (and show in Echo Web) for a day.")
             Button("Open Downloads/Echo") { brain.openDownloads() }
+        }
+    }
+}
+
+struct PhonePane: View {
+    @EnvironmentObject var brain: Brain
+    @State private var ringing = false
+
+    private func ago(_ d: Date) -> String {
+        let m = Int(Date().timeIntervalSince(d) / 60)
+        return m < 1 ? "just now" : m < 60 ? "\(m) min ago" : "\(m / 60) h ago"
+    }
+
+    var body: some View {
+        Text(brain.phone?.name ?? "Your Phone").font(.largeTitle.weight(.bold))
+        if let p = brain.phone {
+            Card(title: "RIGHT NOW · UPDATED \(ago(p.at).uppercased())") {
+                Row(title: "Battery", value: p.battery.map { "\($0)%\(p.charging ? " · charging" : "")" } ?? "Unknown")
+                Row(title: "Network", value: p.network == "wifi" ? "Wi-Fi" : p.network == "cellular" ? (p.carrier ?? "Cellular") : "Offline")
+                Row(title: "Signal", value: p.signal.map { "\($0) of 4 bars" } ?? "Unknown")
+                Row(title: "Hotspot", value: p.hotspot.map { $0 ? "On" : "Off" } ?? "Your phone doesn't say")
+            }
+        } else {
+            Card(title: "NOT HEARD FROM YET") {
+                Text("Open Echo on your phone (1.19 or later) with Settings → Your Computer → Share Battery & Signal on.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        Card(title: "FIND MY PHONE") {
+            Text("Rings at full volume, even on silent, for a minute - or until you tap Found It.").foregroundStyle(.secondary)
+            Button(ringing ? "Stop Ringing" : "Ring My Phone") {
+                brain.ringPhone(stop: ringing)
+                ringing.toggle()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(ringing ? .red : .accentColor)
+        }
+        Card(title: "NOTIFICATIONS ON YOUR PHONE") {
+            Toggle("Show them on this Mac too", isOn: Binding(
+                get: { (brain.settings["echo_phone_notifications_mac"] as? Bool) ?? true },
+                set: { brain.saveSettings(["echo_phone_notifications_mac": $0]) }
+            ))
+            if brain.phoneNotes.isEmpty {
+                Text("None right now. On your phone: Settings → Your Computer → Phone Notifications on Computer.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(brain.phoneNotes) { n in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(n.appName).font(.caption).foregroundStyle(.secondary)
+                            if !n.title.isEmpty { Text(n.title).font(.body.weight(.semibold)) }
+                            if !n.text.isEmpty { Text(n.text).font(.callout).foregroundStyle(.secondary) }
+                        }
+                        Spacer()
+                        Button { brain.dismissPhoneNote(n.id) } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.borderless)
+                            .help("Dismiss on your phone")
+                    }
+                    Divider()
+                }
+                Button("Clear All") { brain.dismissPhoneNote(nil) }
+            }
+        }
+        .onAppear { brain.loadSettings() }
+        .task {
+            // Live while you look at it.
+            while !Task.isCancelled {
+                await brain.refreshPhone()
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+            }
         }
     }
 }

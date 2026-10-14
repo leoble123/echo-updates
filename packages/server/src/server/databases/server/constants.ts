@@ -68,6 +68,7 @@ export const DEFAULT_DB_ITEMS: { [key: string]: () => any } = {
     echo_anthropic_key: () => "",
     echo_clipboard_sync: (): boolean => false,
     echo_auto_codes: (): boolean => true,
+    echo_phone_notifications_mac: (): boolean => true,
     // Backups to the PC: the key (made on first use, never sent to the PC) and when one last finished.
     echo_backup_key: () => "",
     echo_backup_last: () => "0",
