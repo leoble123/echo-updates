@@ -171,6 +171,8 @@ export class EchoRouter {
         );
     };
 
+    static typingNow = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, async () => EchoTyping.now());
+
     static typingTest = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, () => EchoTyping.test());
 
     /** Full-history search: ?q=words&chat=guid&limit=&offset= */

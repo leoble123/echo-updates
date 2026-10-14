@@ -16,9 +16,31 @@ export class EchoTyping {
 
     static lastSent: { at: number; guid: string; display: boolean } = null;
 
+    /** Who's typing right now, by chat guid, until when - for devices without the live feed. */
+    static active = new Map<string, number>();
+
     static heard(guid: string, display: boolean) {
         EchoTyping.heardCount++;
         EchoTyping.lastHeard = { at: Date.now(), guid, display };
+        EchoTyping.mark(guid, display);
+    }
+
+    static mark(guid: string, display: boolean) {
+        if (display) EchoTyping.active.set(guid, Date.now() + 30_000);
+        else EchoTyping.active.delete(guid);
+    }
+
+    /** A message from them landed: they've stopped typing, whatever the helper says. */
+    static landed(guid: string) {
+        if (!EchoTyping.active.delete(guid)) return;
+        Server().emitMessage(TYPING_INDICATOR, { display: false, guid }, "normal", false);
+    }
+
+    /** Chats with someone typing now. Cheap enough to ask every couple of seconds. */
+    static now(): { typing: string[]; heard: number } {
+        const t = Date.now();
+        for (const [guid, until] of EchoTyping.active) if (until < t) EchoTyping.active.delete(guid);
+        return { typing: [...EchoTyping.active.keys()], heard: EchoTyping.heardCount };
     }
 
     static sent(guid: string, display: boolean) {
@@ -44,8 +66,12 @@ export class EchoTyping {
         const [messages] = await Server().iMessageRepo.getMessages({ limit: 1, sort: "DESC", withChats: true, withAttachments: false });
         const chat = messages[0]?.chats?.[0];
         if (!chat?.guid) throw new Error("No conversations to test with yet");
+        EchoTyping.mark(chat.guid, true);
         Server().emitMessage(TYPING_INDICATOR, { display: true, guid: chat.guid }, "normal", false);
-        setTimeout(() => Server().emitMessage(TYPING_INDICATOR, { display: false, guid: chat.guid }, "normal", false), 8000);
+        setTimeout(() => {
+            EchoTyping.mark(chat.guid, false);
+            Server().emitMessage(TYPING_INDICATOR, { display: false, guid: chat.guid }, "normal", false);
+        }, 8000);
         return { chat: chat.displayName || chat.chatIdentifier || chat.guid };
     }
 }

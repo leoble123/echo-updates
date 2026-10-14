@@ -1,5 +1,6 @@
 /* eslint-disable class-methods-use-this */
 // Dependency Imports
+import { EchoTyping } from "@server/services/echoTyping";
 import { app, BrowserWindow, nativeTheme, systemPreferences, dialog, MessageBoxOptions } from "electron";
 import ServerLog, { LogLevel } from "electron-log";
 import process from "process";
@@ -1153,6 +1154,12 @@ class BlueBubblesServer extends EventEmitter {
         }
 
         // Echo: Web Push to Echo Web, alongside the phone notifications below.
+        // Echo: their message landing ends their typing, for devices polling it too.
+        if (type === NEW_MESSAGE && data && !data.isFromMe) {
+            const chatGuid = data.chats?.[0]?.guid;
+            if (chatGuid) EchoTyping.landed(chatGuid);
+        }
+
         if (type === NEW_MESSAGE && sendFcmMessage) {
             EchoPush.get().onMessage(data);
             EchoCodes.get().onMessage(data);
