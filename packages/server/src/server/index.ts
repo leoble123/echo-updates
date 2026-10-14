@@ -75,6 +75,7 @@ import { EchoGuard } from "./services/echoGuard";
 import { EchoPush } from "./services/echoPush";
 import { EchoHandoff } from "./services/echoHandoff";
 import { EchoSearch } from "./services/echoSearch";
+import { EchoBackup } from "./services/echoBackup";
 import { applyEchoDefaults, underLaunchd } from "./services/echoGuard/defaults";
 
 const findProcess = require("find-process");
@@ -679,6 +680,7 @@ class BlueBubblesServer extends EventEmitter {
         this.echoGuard.start();
         EchoHandoff.get().start();
         EchoSearch.get().start();
+        EchoBackup.get().start();
 
         // Perform any post-setup tasks/checks
         await this.postChecks();

@@ -12,6 +12,7 @@ import { EchoMacApps } from "@server/services/echoMacApps";
 import { EchoHandoff } from "@server/services/echoHandoff";
 import { EchoTyping } from "@server/services/echoTyping";
 import { EchoSearch } from "@server/services/echoSearch";
+import { EchoBackup } from "@server/services/echoBackup";
 import { FileStream, Success } from "../responses/success";
 import { BadRequest } from "../responses/errors";
 
@@ -178,6 +179,37 @@ export class EchoRouter {
             offset: Number(q.offset) || 0
         });
         return new Success(ctx, { data: { hits, index: EchoSearch.get().status } }).send();
+    }
+
+    // --- Backups to the PC --------------------------------------------------------
+
+    static backupInfo = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, () => EchoBackup.get().info());
+
+    static async backupDb(ctx: RouterContext, _: Next) {
+        let stream;
+        try {
+            stream = await EchoBackup.get().dbStream();
+        } catch (ex: any) {
+            throw new BadRequest({ error: `Couldn't read the Messages database: ${ex?.message ?? ex}` });
+        }
+        ctx.status = 200;
+        ctx.set("Content-Type", "application/octet-stream");
+        ctx.body = stream;
+    }
+
+    static async backupAttachments(ctx: RouterContext, _: Next) {
+        const cursor = String(ctx.request.query?.since ?? "");
+        const max = Math.min(Math.max(Number(ctx.request.query?.maxBytes) || 1024 ** 3, 50 * 1024 ** 2), 4 * 1024 ** 3);
+        const part = await EchoBackup.get().attachmentsStream(cursor, max);
+        if (!part) {
+            await EchoBackup.get().markPulled();
+            return new Success(ctx, { data: { done: true } }).send();
+        }
+        ctx.status = 200;
+        ctx.set("Content-Type", "application/octet-stream");
+        ctx.set("X-Echo-Next", encodeURIComponent(part.next));
+        ctx.set("X-Echo-Count", String(part.count));
+        ctx.body = part.stream;
     }
 
     // --- Settings, for Echo for Mac ---------------------------------------------
