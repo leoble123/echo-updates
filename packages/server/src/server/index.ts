@@ -73,6 +73,7 @@ import { obfuscatedHandle } from "./utils/StringUtils";
 import { AutoStartMethods } from "./databases/server/constants";
 import { MacOsInterface } from "./api/interfaces/macosInterface";
 import { EchoGuard } from "./services/echoGuard";
+import { EchoAddress } from "./services/echoAddress";
 import { EchoPush } from "./services/echoPush";
 import { EchoCodes } from "./services/echoCodes";
 import { EchoHandoff } from "./services/echoHandoff";
@@ -680,6 +681,7 @@ class BlueBubblesServer extends EventEmitter {
         // as soon as the services do, not after the checks below (which can wait on a prompt).
         this.echoGuard = new EchoGuard();
         this.echoGuard.start();
+        EchoAddress.get().start();
         EchoHandoff.get().start();
         EchoSearch.get().start();
         EchoBackup.get().start();

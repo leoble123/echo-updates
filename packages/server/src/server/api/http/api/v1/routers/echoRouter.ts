@@ -1,3 +1,4 @@
+import { EchoAddress } from "@server/services/echoAddress";
 import { RouterContext } from "koa-router";
 import { Next } from "koa";
 import { app } from "electron";
@@ -61,7 +62,10 @@ export class EchoRouter {
                 address: String(Server().repo.getConfig("server_address") ?? ""),
                 proxy: String(Server().repo.getConfig("proxy_service") ?? ""),
                 macos: os.release(),
-                events: EchoGuard.events.slice(-15)
+                events: EchoGuard.events.slice(-15),
+                // Every way in, so a phone can fall back when one dies, and how the public one is doing.
+                routes: EchoAddress.get().routes(),
+                addressCheck: EchoAddress.get().status
             }
         }).send();
     }
@@ -169,6 +173,13 @@ export class EchoRouter {
         return EchoRouter.mac(ctx, () =>
             EchoMacApps.get().updateNote(id, String(text ?? "").slice(0, 200_000)).then(() => ({ ok: true }))
         );
+    };
+
+    /** Fix My Mac: { what: "address" | "messages" | "engine" | "all" }. */
+    static repair = (ctx: RouterContext, _: Next) => {
+        const { what } = EchoRouter.body(ctx);
+        const w = ["address", "messages", "engine", "all"].includes(String(what)) ? String(what) : "all";
+        return EchoRouter.mac(ctx, () => EchoAddress.get().repair(w));
     };
 
     static typingNow = (ctx: RouterContext, _: Next) => EchoRouter.mac(ctx, async () => EchoTyping.now());

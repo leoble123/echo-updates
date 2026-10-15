@@ -47,6 +47,18 @@ export class EchoGuard extends Loggable {
         }
     }
 
+    /** For other Echo services: something worth showing in Echo Guard's history. */
+    static record(text: string) {
+        EchoGuard.events.push({ at: Date.now(), text });
+        if (EchoGuard.events.length > 30) EchoGuard.events.shift();
+        try {
+            fs.mkdirSync(path.dirname(EchoGuard.eventsFile), { recursive: true });
+            fs.writeFileSync(EchoGuard.eventsFile, JSON.stringify(EchoGuard.events));
+        } catch {
+            // Only history.
+        }
+    }
+
     private note(text: string) {
         this.log.info(text);
         EchoGuard.events.push({ at: Date.now(), text });
