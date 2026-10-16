@@ -50,6 +50,12 @@ export class EchoRouter {
                     messages: Number(Server().repo.getConfig("echo_messages_limit_mb")) || 1400
                 },
                 privateApi: !!Server().privateApi?.helper,
+                // FaceTime through the Mac: switched on, ringable/answerable, and whether the helper is inside FaceTime.
+                faceTime: {
+                    enabled: !!Server().repo.getConfig("enable_ft_private_api"),
+                    calling: !!Server().repo.getConfig("facetime_calling"),
+                    helper: Object.keys(Server().privateApi?.activeClients ?? {}).some(p => /facetime/i.test(p))
+                },
                 pushSubscribers: EchoPush.get().count,
                 typing: EchoTyping.summary(),
                 searchIndex: EchoSearch.get().status,
