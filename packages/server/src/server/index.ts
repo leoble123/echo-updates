@@ -1173,10 +1173,14 @@ class BlueBubblesServer extends EventEmitter {
                 const devices = await this.repo.devices().find();
                 if (isNotEmpty(devices)) {
                     const notifData = JSON.stringify(data);
+                    // Echo: a text from someone has to wake a sleeping phone now. Normal
+                    // priority is held by Android until the phone wakes (texts arriving in
+                    // a batch in the morning); high goes straight through deep sleep.
+                    const wake = type === NEW_MESSAGE && !data?.isFromMe ? "high" : priority;
                     await this.fcm?.sendNotification(
                         devices.map(device => device.identifier),
                         { type, data: notifData },
-                        priority
+                        wake
                     );
                 }
             }
