@@ -1,0 +1,21 @@
+{
+  "android": {
+    "version": "1.27.1",
+    "code": 156,
+    "notes": "Smooth scrolling in long drafts and zoomed photos.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/android/Echo-1.27.1.apk",
+    "sha256": "8716296d579a3133341daf76d29e7374c21c4ff0116a87ff7a0b003213ca24b5",
+    "size": 27333014
+  },
+  "windows": {
+    "version": "0.6.0",
+    "notes": "Nightly encrypted backups of your Mac's messages to this PC.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/windows/Echo-0.6.0.exe",
+    "sha256": "e28fe4f6983b28e33212c2e3ab3da5b3d8855d9bbb0e803750ede221a9519719",
+    "size": 1593856
+  },
+  "web": {
+    "version": "1.10.0",
+    "url": "https://leoble123.github.io/echo-updates/web/"
+  }
+}
