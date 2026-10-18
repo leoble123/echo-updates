@@ -15,13 +15,21 @@ import { EchoMacApps } from "@server/services/echoMacApps";
  * Once a minute it:
  *  - relaunches the server if its own memory stays too high, or if the API stops answering;
  *  - restarts Messages if it bloats (the Private API loop relaunches it with the helper);
- *  - relaunches the server if the Private API helper has been gone for five minutes;
+ *  - reconnects the Private API helper if it has been gone for five minutes, and
+ *    relaunches the server only if that doesn't work (at most once every two hours);
  *  - quits Find My and FaceTime when they are left running in the background;
- *  - clears the server's attachment caches when the disk gets tight;
- *  - relaunches once a night, between 4 and 5am, when nothing is being sent.
+ *  - clears the server's attachment caches when the disk gets tight.
+ *
+ * There is no nightly relaunch any more. A relaunch the server didn't need was
+ * the riskiest thing it did: the helper didn't always come back after one, and
+ * on a temporary address it moved the server somewhere the phone couldn't find.
+ * The memory limits above already catch anything that leaks.
  *
  * Everything it does is written to the server log under "EchoGuard".
  */
+const HELPER_REASON = "the Private API helper didn't come back after reconnecting";
+const HELPER_RELAUNCH = `Relaunching: ${HELPER_REASON}`;
+
 export class EchoGuard extends Loggable {
     tag = "EchoGuard";
 
@@ -30,6 +38,18 @@ export class EchoGuard extends Loggable {
     private startedAt = Date.now();
 
     private strikes = { self: 0, messages: 0, api: 0, helper: 0 };
+
+    /** Helper reconnects tried since it was last seen connected. */
+    private helperRepairs = 0;
+
+    /**
+     * When the server was last relaunched over the helper, from the saved
+     * history so it holds across the relaunch itself: once every two hours at most.
+     */
+    private static get helperRelaunchedAt() {
+        const last = [...EchoGuard.events].reverse().find(e => e.text.startsWith(HELPER_RELAUNCH));
+        return last?.at ?? 0;
+    }
 
     /** What Echo Guard has done recently, newest last (for the Echo apps' status screen). */
     static events: { at: number; text: string }[] = [];
@@ -166,8 +186,22 @@ export class EchoGuard extends Loggable {
         // 4. The Private API helper, which gives up after five quick crashes in a row.
         const papi = Server().repo.getConfig("enable_private_api") as boolean;
         const uptime = Date.now() - this.startedAt;
-        if (this.strike("helper", papi && uptime > 5 * 60_000 && !Server().privateApi?.helper, 5)) {
-            return this.relaunch("the Private API helper has been disconnected for five minutes");
+        const helperUp = !!Server().privateApi?.helper;
+        if (helperUp) this.helperRepairs = 0;
+        if (this.strike("helper", papi && uptime > 5 * 60_000 && !helperUp, 5)) {
+            this.strikes.helper = 0;
+            // First, reconnect just the helper: the server and its address stay put.
+            if (this.helperRepairs < 2) {
+                this.helperRepairs += 1;
+                this.note(`Reconnecting the Private API helper (disconnected for five minutes, try ${this.helperRepairs} of 2)`);
+                await Server().privateApi?.restart().catch((ex: any) => this.log.debug(`Helper restart failed: ${ex?.message ?? String(ex)}`));
+                return;
+            }
+            // Still gone: a relaunch, but not in a loop.
+            if (Date.now() - EchoGuard.helperRelaunchedAt > 2 * 3600_000 && !this.sending()) {
+                this.helperRepairs = 0;
+                return this.relaunch(HELPER_REASON);
+            }
         }
 
         // 5. Apps that only cost memory when they sit in the background.
@@ -203,13 +237,6 @@ export class EchoGuard extends Loggable {
                 const mb = Math.round(cleared / 1e6);
                 this.note(`Disk low (${freeGb.toFixed(1)} GB free): cleared ${mb} MB of caches`);
             }
-        }
-
-        // 7. A fresh start each night.
-        const now = new Date();
-        const nightly = (Server().repo.getConfig("echo_nightly_restart") as boolean) ?? true;
-        if (nightly && now.getHours() === 4 && uptime > 12 * 3600_000 && !this.sending()) {
-            return this.relaunch("nightly refresh");
         }
     }
 
