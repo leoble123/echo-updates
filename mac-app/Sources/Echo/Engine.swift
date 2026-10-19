@@ -64,6 +64,8 @@ struct EngineAPI {
 
     private func url(_ path: String, _ query: [String: String] = [:]) -> URL {
         var c = URLComponents(string: "http://127.0.0.1:\(config.port)/api/v1\(path)")!
+        // The password goes in the Authorization header. Engines before build 39
+        // only read it from the query, so it's there too - this never leaves the Mac.
         c.queryItems = [URLQueryItem(name: "password", value: config.password)]
             + query.map { URLQueryItem(name: $0.key, value: $0.value) }
         return c.url!
@@ -74,6 +76,7 @@ struct EngineAPI {
         var req = URLRequest(url: url(path, query))
         req.httpMethod = method
         req.timeoutInterval = timeout
+        req.setValue("Bearer \(config.password)", forHTTPHeaderField: "Authorization")
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: body)

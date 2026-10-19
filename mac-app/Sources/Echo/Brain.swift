@@ -212,6 +212,29 @@ final class Brain: ObservableObject {
         }
     }
 
+    /// Echo Web browsers linked with a code (GET /echo/browsers).
+    @Published var browsers: [[String: Any]] = []
+
+    func loadBrowsers() {
+        Task {
+            if let d = try? await api?.call("GET", "/echo/browsers") as? [[String: Any]] { browsers = d }
+        }
+    }
+
+    /// Signs browsers out for real; nil signs out every one.
+    func revokeBrowsers(_ ids: [String]?) {
+        Task {
+            do {
+                let body: [String: Any] = ids.map { ["ids": $0] } ?? ["all": true]
+                _ = try await api?.call("POST", "/echo/browsers/revoke", body: body)
+                note = ids == nil ? "Every linked browser is signed out." : "Signed out."
+            } catch {
+                note = "Couldn't sign out: \(error.localizedDescription)"
+            }
+            loadBrowsers()
+        }
+    }
+
     /// A new random password. Every paired device has to scan the new code.
     func newPassword() {
         Task {

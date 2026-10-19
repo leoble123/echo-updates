@@ -1,4 +1,5 @@
 /* eslint-disable max-len */
+import { EchoAuth } from "@server/services/echoAuth";
 import { Server as SocketServer, ServerOptions } from "socket.io";
 
 // HTTP libraries
@@ -13,7 +14,7 @@ import * as fs from "fs";
 
 // Internal libraries
 import { Server } from "@server";
-import { isNotEmpty, onlyAlphaNumeric, safeTrim } from "@server/helpers/utils";
+import { isNotEmpty, onlyAlphaNumeric } from "@server/helpers/utils";
 import { EventCache } from "@server/eventCache";
 import { CertificateService } from "@server/services/certificateService";
 
@@ -190,20 +191,18 @@ export class HttpService extends Loggable {
                 this.log.info(`Client disconnected (Total Clients: ${this.socketServer.sockets.sockets.size})`);
             });
 
-            let pass = socket.handshake.query?.password ?? socket.handshake.query?.guid;
             const cfgPass = String((await Server().repo.getConfig("password")) as string);
 
-            // Decode the param incase it contains URL encoded characters
-            pass = decodeURI(pass as string);
-
-            // Basic authentication
-            if (safeTrim(pass) === safeTrim(cfgPass)) {
+            // The password or a linked browser's token, from the handshake's
+            // auth, an Authorization header, or the old ?password= query.
+            if (EchoAuth.socketRole(cfgPass, socket.handshake)) {
                 this.log.info(
                     `Client Authenticated Successfully (Total Clients: ${this.socketServer.sockets.sockets.size})`
                 );
             } else {
                 socket.disconnect();
                 this.log.info(`Closing client connection. Authentication failed.`);
+                return;
             }
 
             /**

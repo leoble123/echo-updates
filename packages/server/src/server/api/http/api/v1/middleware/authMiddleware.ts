@@ -1,30 +1,28 @@
 import { Context, Next } from "koa";
 import { Server } from "@server";
-import { safeTrim } from "@server/helpers/utils";
-import { ServerError, Unauthorized } from "../responses/errors";
+import { EchoAuth, ownerOnly } from "@server/services/echoAuth";
+import { Forbidden, ServerError, Unauthorized } from "../responses/errors";
 
+/**
+ * Lets a request through when it carries the server password (header or the
+ * old ?password=) or a linked browser's token. Browsers can't change the
+ * password or manage other browsers.
+ */
 export const AuthMiddleware = async (ctx: Context, next: Next) => {
-    const params = ctx.request.query;
-
-    // Make sure we have a token
-    const token = (params?.guid ?? params?.password ?? params?.token) as string;
-    if (!token) {
-        Server().log(`Client (IP: ${ctx.request.ip}) attempted to access the API without a token.`, "debug");
-        throw new Unauthorized({ error: "Missing server password!" });
-    }
-
-    // Make sure we have a password from the database
     const password = String(Server().repo.getConfig("password") as string);
     if (!password) {
         throw new ServerError({ error: "Failed to retrieve password from the database" });
     }
 
-    // Validate the passwords match
-    if (safeTrim(password) !== safeTrim(token)) {
-        Server().log(`Client (IP: ${ctx.request.ip}) tried to authenticate with an incorrect password.`, "debug");
-        throw new Unauthorized();
+    const role = EchoAuth.httpRole(password, ctx.headers, ctx.request.query);
+    if (!role) {
+        Server().log(`Client (IP: ${ctx.request.ip}) failed to authenticate.`, "debug");
+        throw new Unauthorized({ error: "Missing or wrong server password!" });
     }
+    if (role !== "owner" && ownerOnly(ctx.method, ctx.path)) {
+        throw new Forbidden({ error: "Only the server password can do that." });
+    }
+    ctx.state.echoRole = role;
 
-    // Go to the next middleware
     await next();
 };

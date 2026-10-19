@@ -60,6 +60,7 @@ struct SettingsPane: View {
             .onChange(of: brain.settings.count) { _ in fill() }
 
         PairingCard()
+        BrowsersCard()
 
         Card(title: "HOW DEVICES REACH THIS MAC") {
             Picker("Address", selection: $method) {
@@ -170,7 +171,7 @@ struct PairingCard: View {
                     .frame(width: 180, height: 180)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("In Echo on your phone: Settings → Change Server → Scan. Or paste the setup code into Echo Web.")
+                        Text("In Echo on your phone: Settings → Connection to Your Mac → Scan Server QR Code. For a browser, use a link code from the phone instead (Settings → Echo on the Web) - it never gets this password.")
                         Button("Copy Setup Code") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(code(p), forType: .string)
@@ -184,5 +185,44 @@ struct PairingCard: View {
                 Text("Waiting for the engine's address…").foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// Echo Web browsers linked with a code from the phone. Each has its own key,
+/// so signing one out here locks it out at once - the password stays the same.
+struct BrowsersCard: View {
+    @EnvironmentObject var brain: Brain
+
+    private func when(_ ms: Double) -> String {
+        guard ms > 0 else { return "never" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f.localizedString(for: Date(timeIntervalSince1970: ms / 1000), relativeTo: Date())
+    }
+
+    var body: some View {
+        Card(title: "LINKED BROWSERS") {
+            if brain.browsers.isEmpty {
+                Text("No browsers linked with a code. Link one from your phone: Settings → Echo on the Web.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(brain.browsers.indices, id: \.self) { i in
+                    let b = brain.browsers[i]
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(b["name"] as? String ?? "Browser")
+                            Text("Last seen \(when((b["seenAt"] as? NSNumber)?.doubleValue ?? 0))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Sign Out") { brain.revokeBrowsers([b["id"] as? String ?? ""]) }
+                    }
+                }
+                Button("Sign Out All Browsers") { brain.revokeBrowsers(nil) }
+            }
+            Text("Browsers set up with the setup code above hold the server password itself - to sign those out, choose a new password.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .onAppear { brain.loadBrowsers() }
     }
 }

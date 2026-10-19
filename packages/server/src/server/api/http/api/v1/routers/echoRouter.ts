@@ -16,6 +16,7 @@ import { EchoTyping } from "@server/services/echoTyping";
 import { EchoSearch } from "@server/services/echoSearch";
 import { EchoBackup } from "@server/services/echoBackup";
 import { EchoRemote } from "@server/services/echoRemote";
+import { EchoAuth } from "@server/services/echoAuth";
 import { wrapped } from "@server/services/echoWrapped";
 import fs from "fs";
 import { FileStream, Success } from "../responses/success";
@@ -28,12 +29,43 @@ const PREVIEW_TTL = 6 * 3600_000;
 
 /** Echo-only endpoints: health, Web Push and link previews. */
 export class EchoRouter {
+    /** A token for a browser being linked (Echo Web). Owner only; returned once. */
+    static async mintBrowser(ctx: RouterContext, _: Next) {
+        const name = String((ctx.request.body as any)?.name ?? "Browser");
+        return new Success(ctx, { data: EchoAuth.browsers.mint(name) }).send();
+    }
+
+    /** Linked browsers: name, when linked, when last seen. Never the tokens. */
+    static async browsers(ctx: RouterContext, _: Next) {
+        return new Success(ctx, { data: EchoAuth.browsers.all() }).send();
+    }
+
+    /** Signs browsers out for real: their tokens stop working at once. {ids: [...]} or {all: true}. */
+    static async revokeBrowsers(ctx: RouterContext, _: Next) {
+        const body = (ctx.request.body as any) ?? {};
+        const ids = body.all ? null : (Array.isArray(body.ids) ? body.ids.map(String) : []);
+        return new Success(ctx, { data: { removed: EchoAuth.browsers.revoke(ids) } }).send();
+    }
+
+    /** A browser signing itself out (Echo Web's Sign Out): its key stops working. */
+    static async leaveBrowser(ctx: RouterContext, _: Next) {
+        return new Success(ctx, { data: { left: EchoAuth.leave(ctx.headers, ctx.request.query) } }).send();
+    }
+
+    /** A linked browser naming itself, so the phone and Mac list "Chrome on Windows". */
+    static async nameBrowser(ctx: RouterContext, _: Next) {
+        const name = String((ctx.request.body as any)?.name ?? "");
+        return new Success(ctx, { data: { named: EchoAuth.rename(ctx.headers, ctx.request.query, name) } }).send();
+    }
+
     static async status(ctx: RouterContext, _: Next) {
         const reading = EchoGuard.lastReading;
         return new Success(ctx, {
             data: {
                 echo: true,
                 version: app.getVersion(),
+                // What this server's sign-in understands, so apps know they can stop putting the password in links.
+                auth: { header: true, browsers: true },
                 uptimeSec: Math.round(process.uptime()),
                 memoryMb: reading
                     ? {

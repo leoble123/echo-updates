@@ -14,6 +14,12 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 39, date: "19 October 2026", headline: "Browsers get their own keys.", changes: [
+            "Linked Browsers, in Settings: every browser linked with a code from your phone, when it was last used, and a Sign Out that locks it out at once.",
+            "A browser linked with a code gets a key of its own, never your server password - and it can't change the password or let other browsers in.",
+            "Phones and browsers can send the password in a header instead of in web addresses, so it stays out of links.",
+            "Echo Guard's helper repairs are now tested on every build.",
+        ]),
         MacRelease(build: 38, date: "19 October 2026", headline: "What's New, and no more nightly restart setting.", changes: [
             "This page: what each update changed, shown once after Echo updates.",
             "The \"Fresh restart every night at 4am\" switch is gone. Echo no longer restarts anything at night - Echo Guard only steps in when something actually goes wrong.",

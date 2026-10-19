@@ -670,6 +670,11 @@ export class HttpRoutes {
                 prefix: "echo",
                 routes: [
                     { method: HttpMethod.GET, path: "status", controller: EchoRouter.status },
+                    { method: HttpMethod.POST, path: "browsers", controller: EchoRouter.mintBrowser },
+                    { method: HttpMethod.GET, path: "browsers", controller: EchoRouter.browsers },
+                    { method: HttpMethod.POST, path: "browsers/revoke", controller: EchoRouter.revokeBrowsers },
+                    { method: HttpMethod.POST, path: "browser/leave", controller: EchoRouter.leaveBrowser },
+                    { method: HttpMethod.POST, path: "browser/name", controller: EchoRouter.nameBrowser },
                     { method: HttpMethod.GET, path: "push/key", controller: EchoRouter.pushKey },
                     { method: HttpMethod.POST, path: "push/subscribe", controller: EchoRouter.pushSubscribe },
                     { method: HttpMethod.POST, path: "push/unsubscribe", controller: EchoRouter.pushUnsubscribe },

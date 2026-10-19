@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import { Server } from "@server";
 import { FileSystem } from "@server/fileSystem";
+import { helperStep, lastRelaunch } from "./policy";
 import { Loggable } from "@server/lib/logging/Loggable";
 import { EchoMacApps } from "@server/services/echoMacApps";
 
@@ -47,8 +48,7 @@ export class EchoGuard extends Loggable {
      * history so it holds across the relaunch itself: once every two hours at most.
      */
     private static get helperRelaunchedAt() {
-        const last = [...EchoGuard.events].reverse().find(e => e.text.startsWith(HELPER_RELAUNCH));
-        return last?.at ?? 0;
+        return lastRelaunch(EchoGuard.events, HELPER_RELAUNCH);
     }
 
     /** What Echo Guard has done recently, newest last (for the Echo apps' status screen). */
@@ -190,15 +190,16 @@ export class EchoGuard extends Loggable {
         if (helperUp) this.helperRepairs = 0;
         if (this.strike("helper", papi && uptime > 5 * 60_000 && !helperUp, 5)) {
             this.strikes.helper = 0;
+            const step = helperStep(this.helperRepairs, EchoGuard.helperRelaunchedAt, Date.now(), this.sending());
             // First, reconnect just the helper: the server and its address stay put.
-            if (this.helperRepairs < 2) {
+            if (step === "repair") {
                 this.helperRepairs += 1;
                 this.note(`Reconnecting the Private API helper (disconnected for five minutes, try ${this.helperRepairs} of 2)`);
                 await Server().privateApi?.restart().catch((ex: any) => this.log.debug(`Helper restart failed: ${ex?.message ?? String(ex)}`));
                 return;
             }
             // Still gone: a relaunch, but not in a loop.
-            if (Date.now() - EchoGuard.helperRelaunchedAt > 2 * 3600_000 && !this.sending()) {
+            if (step === "relaunch") {
                 this.helperRepairs = 0;
                 return this.relaunch(HELPER_REASON);
             }
