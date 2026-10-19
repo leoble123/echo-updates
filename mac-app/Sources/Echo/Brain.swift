@@ -24,6 +24,11 @@ final class Brain: ObservableObject {
     @Published var clipboardOn: Bool?
     @Published var note: String?
 
+    // What's New: notes for an update that haven't been read yet.
+    @Published var whatsNewUnseen = !WhatsNew.unseen.isEmpty
+    /// A pane the menu bar asked the window to show.
+    @Published var requestedPane: Pane?
+
     // Updates
     @Published var latestBuild: Int?
     @Published var installedBuild: Int? = EngineService.installedBuild
@@ -51,6 +56,12 @@ final class Brain: ObservableObject {
         schedule()
         refresh()
         Task { await checkForUpdates() }
+        // Just updated: say so once, with what changed.
+        if let newest = WhatsNew.unseen.first,
+           UserDefaults.standard.integer(forKey: "whatsNewNotifiedBuild") < newest.build {
+            UserDefaults.standard.set(newest.build, forKey: "whatsNewNotifiedBuild")
+            notify("Echo updated to build \(newest.build)", newest.headline + " Open Echo → What's New.")
+        }
         // Updates are looked for every few hours; installed overnight when automatic.
         Timer.scheduledTimer(withTimeInterval: 3 * 3600, repeats: true) { [weak self] _ in
             guard let brain = self else { return }
@@ -111,6 +122,11 @@ final class Brain: ObservableObject {
         healedAt = Date()
         EngineService.restart()
         notify("Echo restarted the engine", running ? "It stopped answering for two minutes." : "It had stopped.")
+    }
+
+    func markWhatsNewSeen() {
+        WhatsNew.markSeen()
+        whatsNewUnseen = false
     }
 
     func notify(_ title: String, _ body: String) {

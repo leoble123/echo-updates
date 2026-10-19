@@ -99,7 +99,8 @@ struct SettingsPane: View {
 
         Card(title: "ECHO GUARD") {
             toggle("Watch and heal the engine and Messages", "echo_guard")
-            toggle("Fresh restart every night at 4am", "echo_nightly_restart")
+            Text("No nightly restart: Echo Guard only steps in when something goes wrong - the engine or Messages growing too big, the API not answering, or the Private API dropping (it reconnects just the helper first).")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Text("Engine memory limit")
                 Slider(value: $serverLimit, in: 400...3000, step: 100, onEditingChanged: { editing in

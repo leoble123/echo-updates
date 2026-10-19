@@ -70,6 +70,17 @@ struct MenuPanel: View {
                 }
                 .font(.caption)
             }
+            if brain.whatsNewUnseen, let newest = WhatsNew.unseen.first {
+                Button {
+                    brain.requestedPane = .whatsNew
+                    openWindow(id: "main"); Dock.show()
+                } label: {
+                    Label("New in build \(newest.build): \(newest.headline)", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(2)
+                }
+                .buttonStyle(.bordered)
+            }
             if brain.updateAvailable {
                 Button {
                     brain.update()
@@ -110,6 +121,7 @@ enum Pane: String, CaseIterable, Identifiable {
     case backups = "Backups"
     case settings = "Settings"
     case updates = "Updates"
+    case whatsNew = "What's New"
     case logs = "Logs"
     var id: Pane { self }
     var symbol: String {
@@ -122,6 +134,7 @@ enum Pane: String, CaseIterable, Identifiable {
         case .backups: return "externaldrive.badge.timemachine"
         case .settings: return "gearshape"
         case .updates: return "arrow.down.circle"
+        case .whatsNew: return "sparkles.rectangle.stack"
         case .logs: return "doc.text.magnifyingglass"
         }
     }
@@ -135,9 +148,14 @@ struct MainWindow: View {
         NavigationSplitView {
             List(Pane.allCases, selection: $section) { s in
                 Label(s.rawValue, systemImage: s.symbol)
-                    .badge(s == .updates && brain.updateAvailable ? 1 : 0)
+                    .badge((s == .updates && brain.updateAvailable) || (s == .whatsNew && brain.whatsNewUnseen) ? 1 : 0)
             }
             .navigationSplitViewColumnWidth(190)
+            .onReceive(brain.$requestedPane) { pane in
+                guard let pane else { return }
+                section = pane
+                brain.requestedPane = nil
+            }
         } detail: {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -150,6 +168,7 @@ struct MainWindow: View {
                     case .backups: BackupsPane()
                     case .settings: SettingsPane()
                     case .updates: UpdatesPane()
+                    case .whatsNew: WhatsNewPane()
                     case .logs: LogsPane()
                     }
                     if let note = brain.note {
