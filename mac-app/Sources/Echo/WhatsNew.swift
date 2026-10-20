@@ -14,6 +14,9 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 40, date: "20 October 2026", headline: "Stickers land where they were put.", changes: [
+            "When someone drops a sticker on a message, Echo Server now tells your phone exactly where - so it shows on the bubble at that spot, size and angle, like on an iPhone.",
+        ]),
         MacRelease(build: 39, date: "19 October 2026", headline: "Browsers get their own keys.", changes: [
             "Linked Browsers, in Settings: every browser linked with a code from your phone, when it was last used, and a Sign Out that locks it out at once.",
             "A browser linked with a code gets a key of its own, never your server password - and it can't change the password or let other browsers in.",

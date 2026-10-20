@@ -118,6 +118,7 @@ export type AttachmentResponse = {
     isOutgoing?: boolean;
     transferName: string;
     isSticker?: boolean;
+    stickerPlacement?: { x: number; y: number; scale: number; rotation: number; bubbleWidth: number } | null;
     hideAttachment?: boolean;
     originalGuid?: string;
     metadata?: { [key: string]: string | boolean | number };

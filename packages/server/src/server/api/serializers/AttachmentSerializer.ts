@@ -8,6 +8,7 @@ import { AttachmentResponse } from "@server/types";
 import { DEFAULT_ATTACHMENT_CONFIG } from "./constants";
 import type { AttachmentSerializerMultiParams, AttachmentSerializerSingleParams } from "./types";
 import { AttachmentInterface } from "../interfaces/attachmentInterface";
+import { stickerPlacement } from "@server/services/echoStickers/placement";
 
 export class AttachmentSerializer {
     static async serialize({
@@ -113,6 +114,10 @@ export class AttachmentSerializer {
                     isOutgoing: attachment.isOutgoing,
                     hideAttachment: attachment.hideAttachment,
                     isSticker: attachment.isSticker,
+                    // Where it sits on the bubble it was dropped on (Echo).
+                    stickerPlacement: attachment.isSticker
+                        ? stickerPlacement(attachment.stickerUserInfo as any)
+                        : null,
                     originalGuid: attachment.originalGuid,
                     hasLivePhoto: !!AttachmentInterface.getLivePhotoPath(attachment)
                 }
