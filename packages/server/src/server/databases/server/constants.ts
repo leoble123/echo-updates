@@ -59,6 +59,7 @@ export const DEFAULT_DB_ITEMS: { [key: string]: () => any } = {
     // Echo Server
     echo_lean_applied: () => 0,
     echo_guard: () => 1,
+    echo_address_fallback: () => "",
     echo_nightly_restart: () => 1,
     // Strings so they aren't read back as booleans (see start_delay).
     echo_server_limit_mb: () => "900",

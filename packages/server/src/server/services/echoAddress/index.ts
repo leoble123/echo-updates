@@ -129,7 +129,69 @@ export class EchoAddress extends Loggable {
         });
     }
 
+    /** Is Tailscale itself up and online? Null when that can't be told (no Tailscale, the command failed). */
+    async tailscaleUp(): Promise<boolean> {
+        const ts = this.tailscale();
+        if (!ts) return null;
+        const out = await FileSystem.execShellCommand(`"${ts}" status --json 2>/dev/null`).catch((): string => null);
+        try {
+            const j = JSON.parse(String(out));
+            return j.BackendState === "Running" && j.Self?.Online !== false;
+        } catch {
+            return null;
+        }
+    }
+
+    private downChecks = 0;
+
+    /**
+     * Tailscale off (logged out, quit, its network extension stopped) takes
+     * the permanent address with it, and turning Funnel back on can't help.
+     * Then a Cloudflare tunnel stands in: Echo Server publishes its address
+     * to Firebase as it always does for one, and phones follow it there. When
+     * Tailscale is back, the permanent address is put back.
+     */
+    async standIn(): Promise<void> {
+        const repo = Server().repo;
+        const saved = repo.getConfig("echo_address_fallback") as string;
+        const up = await this.tailscaleUp();
+        if (saved) {
+            if (up !== true) return;
+            try {
+                const was = JSON.parse(saved);
+                await repo.setConfig("echo_address_fallback", "");
+                await repo.setConfig("proxy_service", was.proxy);
+                await repo.setConfig("server_address", was.address);
+                EchoGuard.record("Tailscale is back: the permanent address is in use again");
+            } catch (e: any) {
+                this.log.debug(`couldn't restore the address: ${e?.message ?? e}`);
+            }
+            this.downChecks = 0;
+            return;
+        }
+        if (!this.funnelHost() || up !== false) {
+            this.downChecks = 0;
+            return;
+        }
+        // Ten minutes down, so a reconnect or a sleep isn't mistaken for it.
+        if (++this.downChecks < 2) return;
+        await this.repairFunnel();
+        if ((await this.tailscaleUp()) === true) return;
+        await repo.setConfig("echo_address_fallback", JSON.stringify({
+            proxy: repo.getConfig("proxy_service"),
+            address: repo.getConfig("server_address")
+        }));
+        await repo.setConfig("proxy_service", "Cloudflare");
+        EchoGuard.record("Tailscale is offline: reachable through a Cloudflare tunnel until it's back");
+        this.downChecks = 0;
+    }
+
     async check(): Promise<{ ok: boolean; detail: string }> {
+        await this.standIn().catch((e: any) => this.log.debug(`stand-in failed: ${e?.message ?? e}`));
+        if (Server().repo.getConfig("echo_address_fallback")) {
+            this.status = { at: Date.now(), ok: true, detail: "Tailscale is offline - using a Cloudflare tunnel meanwhile" };
+            return this.status;
+        }
         const host = this.funnelHost();
         if (!host) {
             this.status = { at: Date.now(), ok: true, detail: "No Tailscale address to watch" };
