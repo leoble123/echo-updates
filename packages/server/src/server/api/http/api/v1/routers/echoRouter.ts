@@ -385,12 +385,12 @@ export class EchoRouter {
 
     // --- Your phones and tablets, together ---------------------------------------
 
-    static devices = (ctx: RouterContext, _: Next) => {
+    static devices = async (ctx: RouterContext, _: Next) => {
         const b = EchoRouter.body(ctx);
         return new Success(ctx, { data: EchoDevices.report(b) }).send();
     };
 
-    static seen = (ctx: RouterContext, _: Next) => {
+    static seen = async (ctx: RouterContext, _: Next) => {
         const b = EchoRouter.body(ctx);
         return new Success(ctx, { data: EchoDevices.seen(b) }).send();
     };
