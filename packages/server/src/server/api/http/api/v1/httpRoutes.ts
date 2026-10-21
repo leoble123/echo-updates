@@ -714,6 +714,8 @@ export class HttpRoutes {
                     { method: HttpMethod.GET, path: "settings", controller: EchoRouter.settings },
                     { method: HttpMethod.POST, path: "settings", controller: EchoRouter.setSettings },
                     { method: HttpMethod.POST, path: "password", controller: EchoRouter.newPassword },
+                    { method: HttpMethod.POST, path: "devices", controller: EchoRouter.devices },
+                    { method: HttpMethod.POST, path: "seen", controller: EchoRouter.seen },
                     { method: HttpMethod.GET, path: "clipboard", controller: EchoRouter.clipboard },
                     { method: HttpMethod.POST, path: "clipboard", controller: EchoRouter.setClipboard },
                     { method: HttpMethod.POST, path: "clipboard/sync", controller: EchoRouter.clipboardSync },

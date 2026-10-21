@@ -14,6 +14,9 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 42, date: "21 October 2026", headline: "Echo on two devices, one alert.", changes: [
+            "Your phones and tablets check in with this Mac, so only the one you're using rings - the others get the message quietly. Read a conversation or swipe its alert away on one, and it clears on the rest, even with read receipts off.",
+        ]),
         MacRelease(build: 41, date: "20 October 2026", headline: "Reachable even when Tailscale isn't.", changes: [
             "If Tailscale goes offline for ten minutes, Echo Server switches to a Cloudflare tunnel on its own and your phone follows it there. When Tailscale is back, your permanent address is put back.",
         ]),

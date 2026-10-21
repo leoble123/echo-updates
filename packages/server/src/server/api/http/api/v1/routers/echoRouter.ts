@@ -13,6 +13,7 @@ import { EchoAI } from "@server/services/echoAI";
 import { EchoMacApps } from "@server/services/echoMacApps";
 import { EchoHandoff } from "@server/services/echoHandoff";
 import { EchoTyping } from "@server/services/echoTyping";
+import { EchoDevices } from "@server/services/echoDevices";
 import { EchoSearch } from "@server/services/echoSearch";
 import { EchoBackup } from "@server/services/echoBackup";
 import { EchoRemote } from "@server/services/echoRemote";
@@ -380,6 +381,18 @@ export class EchoRouter {
             await Server().repo.setConfig("password", next);
             return { password: next };
         });
+    };
+
+    // --- Your phones and tablets, together ---------------------------------------
+
+    static devices = (ctx: RouterContext, _: Next) => {
+        const b = EchoRouter.body(ctx);
+        return new Success(ctx, { data: EchoDevices.report(b) }).send();
+    };
+
+    static seen = (ctx: RouterContext, _: Next) => {
+        const b = EchoRouter.body(ctx);
+        return new Success(ctx, { data: EchoDevices.seen(b) }).send();
     };
 
     // --- Clipboard and file drop ------------------------------------------------
