@@ -14,6 +14,11 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 43, date: "21 October 2026", headline: "Your address stays the one you picked.", changes: [
+            "Fixed: choosing My own address (your Tailscale one) could flip back to Cloudflare. The Tailscale check misread a working Tailscale as offline and switched to the backup tunnel; it now trusts this Mac's Tailscale connection itself.",
+            "Picking an address method yourself is final - an earlier automatic switch can no longer undo it.",
+            "New switch under How Devices Reach This Mac: use Cloudflare only while Tailscale is offline. Turn it off and your address never changes on its own.",
+        ]),
         MacRelease(build: 42, date: "21 October 2026", headline: "Echo on two devices, one alert.", changes: [
             "Your phones and tablets check in with this Mac, so only the one you're using rings - the others get the message quietly. Read a conversation or swipe its alert away on one, and it clears on the rest, even with read receipts off.",
         ]),

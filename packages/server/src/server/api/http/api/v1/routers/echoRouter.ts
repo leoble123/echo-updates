@@ -327,6 +327,7 @@ export class EchoRouter {
         echo_auto_codes: "bool",
         echo_phone_notifications_mac: "bool",
         echo_nightly_restart: "bool",
+        echo_address_standin: "bool",
         echo_server_limit_mb: "mb",
         echo_messages_limit_mb: "mb"
     };
@@ -364,6 +365,11 @@ export class EchoRouter {
                     }
                     changes.push([k, String(v)]);
                 } else changes.push([k, String(v ?? "").trim().slice(0, 500)]);
+            }
+            // You picked how devices reach this Mac: that's final, so a
+            // Cloudflare stand-in waiting to hand back an older choice lets go.
+            if (changes.some(([k]) => k === "proxy_service" || k === "server_address")) {
+                await Server().repo.setConfig("echo_address_fallback", "");
             }
             // One at a time: each change is applied by the engine as it lands.
             for (const [k, v] of changes) await Server().repo.setConfig(k, v);

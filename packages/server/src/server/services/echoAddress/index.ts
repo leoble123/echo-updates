@@ -131,6 +131,10 @@ export class EchoAddress extends Loggable {
 
     /** Is Tailscale itself up and online? Null when that can't be told (no Tailscale, the command failed). */
     async tailscaleUp(): Promise<boolean> {
+        // The Mac holding a tailnet address is the surest sign: the command
+        // line, run from in here rather than Terminal, can call a working
+        // Tailscale "stopped" - and that used to throw your own address away.
+        if (this.tailnetIp()) return true;
         const ts = this.tailscale();
         if (!ts) return null;
         const out = await FileSystem.execShellCommand(`"${ts}" status --json 2>/dev/null`).catch((): string => null);
@@ -169,7 +173,9 @@ export class EchoAddress extends Loggable {
             this.downChecks = 0;
             return;
         }
-        if (!this.funnelHost() || up !== false) {
+        // Off in Settings: your address stays yours, come what may.
+        const allowed = repo.getConfig("echo_address_standin");
+        if (!this.funnelHost() || up !== false || allowed === false || allowed === 0 || allowed === "0") {
             this.downChecks = 0;
             return;
         }
@@ -181,7 +187,7 @@ export class EchoAddress extends Loggable {
             proxy: repo.getConfig("proxy_service"),
             address: repo.getConfig("server_address")
         }));
-        await repo.setConfig("proxy_service", "Cloudflare");
+        await repo.setConfig("proxy_service", "cloudflare");
         EchoGuard.record("Tailscale is offline: reachable through a Cloudflare tunnel until it's back");
         this.downChecks = 0;
     }

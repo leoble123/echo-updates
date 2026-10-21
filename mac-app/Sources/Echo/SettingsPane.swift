@@ -29,7 +29,9 @@ struct SettingsPane: View {
         let s = brain.settings
         guard !s.isEmpty, !loaded else { return }
         loaded = true
-        method = s["proxy_service"] as? String ?? "cloudflare"
+        // Older builds wrote "Cloudflare" and "Dynamic DNS"; the picker knows the lowercase names.
+        let raw = (s["proxy_service"] as? String ?? "cloudflare").lowercased().replacingOccurrences(of: " ", with: "-")
+        method = ["cloudflare", "ngrok", "zrok", "dynamic-dns", "lan-url"].contains(raw) ? raw : "cloudflare"
         ownAddress = s["server_address"] as? String ?? ""
         ngrokDomain = s["ngrok_custom_domain"] as? String ?? ""
         port = "\(s["socket_port"] as? NSNumber ?? 1234)"
@@ -83,6 +85,7 @@ struct SettingsPane: View {
             default:
                 EmptyView()
             }
+            toggle("If Tailscale goes offline, use Cloudflare until it's back", "echo_address_standin")
             HStack {
                 Button("Apply") { applyAddress() }.buttonStyle(.borderedProminent).disabled(brain.savingSettings)
                 Text("Now: \(brain.status.address.isEmpty ? "-" : brain.status.address)")
