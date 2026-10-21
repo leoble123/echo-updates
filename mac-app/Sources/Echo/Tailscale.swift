@@ -45,7 +45,8 @@ final class TailscaleKeeper: ObservableObject {
         UserDefaults.standard.register(defaults: ["keepTailscaleOn": true])
         enabled = UserDefaults.standard.bool(forKey: "keepTailscaleOn")
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.check() }
+            guard let keeper = self else { return }
+            Task { @MainActor in keeper.check() }
         }
         check()
     }
