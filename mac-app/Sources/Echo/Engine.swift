@@ -120,6 +120,9 @@ struct EngineStatus {
     var events: [(Date, String)] = []
     /// Your Echo phones and tablets, as they last checked in.
     var devices: [EchoDevice] = []
+    /// Whether the public address answers from outside, and what was last seen.
+    var addressOk = true
+    var addressDetail = ""
 
     init() {}
 
@@ -148,6 +151,9 @@ struct EngineStatus {
         typingHeard = int(t, "heard") ?? 0
         typingLastHeard = date(t?["lastHeardAt"])
         typingSent = int(t, "sent") ?? 0
+        let check = j["addressCheck"] as? [String: Any]
+        addressOk = check?["ok"] as? Bool ?? true
+        addressDetail = check?["detail"] as? String ?? ""
         devices = (j["devices"] as? [[String: Any]] ?? []).compactMap { d in
             guard let id = d["id"] as? String else { return nil }
             return EchoDevice(

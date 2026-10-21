@@ -220,6 +220,7 @@ struct OverviewPane: View {
                 Text(brain.healthDetail).foregroundStyle(.secondary)
             }
         }
+        ProblemsCard(keeper: brain.tailscale)
         if case .attention = brain.health { PermissionsCard() }
         if case .down = brain.health {
             Button("Start the engine") { brain.restartEngine() }.buttonStyle(.borderedProminent)
@@ -276,6 +277,90 @@ struct OverviewPane: View {
     }
 }
 
+/// What's wrong right now, each with the button that fixes it. Hidden when nothing is.
+struct ProblemsCard: View {
+    @EnvironmentObject var brain: Brain
+    @ObservedObject var keeper: TailscaleKeeper
+
+    private struct Problem: Identifiable {
+        let id: String
+        let text: String
+        let action: String
+        let fix: () -> Void
+    }
+
+    private var problems: [Problem] {
+        let s = brain.status
+        var out: [Problem] = []
+        if case .down = brain.health {
+            out.append(Problem(id: "engine", text: "The engine isn't answering.", action: "Restart Engine") { brain.restartEngine() })
+        }
+        switch keeper.state {
+        case .closed:
+            out.append(Problem(id: "ts", text: "Tailscale isn't running, so your permanent address is down.", action: "Open Tailscale") { keeper.fix() })
+        case .disconnected:
+            out.append(Problem(id: "ts", text: "Tailscale is disconnected, so your permanent address is down.", action: "Connect") { keeper.fix() })
+        case .signedOut:
+            out.append(Problem(id: "ts", text: "Tailscale is signed out. Sign in once and it stays that way.", action: "Open Tailscale") { keeper.fix() })
+        default: break
+        }
+        if !s.addressOk {
+            out.append(Problem(id: "address", text: "Your address isn't reachable from outside (\(s.addressDetail)).", action: "Turn It Back On") { brain.repair("address") })
+        }
+        if case .good = brain.health, !s.privateApi {
+            out.append(Problem(id: "papi", text: "The Private API helper isn't connected - no typing, reactions or replies.", action: "Restart Messages") { brain.restartMessages() })
+        }
+        if let mb = s.messagesMb, mb > s.messagesLimitMb * 9 / 10 {
+            out.append(Problem(id: "msgmem", text: "Messages is using \(mb) MB, close to its limit.", action: "Restart Messages") { brain.restartMessages() })
+        }
+        if let mb = s.serverMb, mb > s.serverLimitMb * 9 / 10 {
+            out.append(Problem(id: "srvmem", text: "The engine is using \(mb) MB, close to its limit.", action: "Restart Engine") { brain.restartEngine() })
+        }
+        if let gb = s.freeDiskGb, gb < 5 {
+            out.append(Problem(id: "disk", text: String(format: "Only %.1f GB free - Messages needs room for photos.", gb), action: "Open Storage") {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.settings.Storage")!)
+            })
+        }
+        return out
+    }
+
+    var body: some View {
+        let list = problems
+        if !list.isEmpty {
+            Card(title: list.count == 1 ? "1 THING NEEDS FIXING" : "\(list.count) THINGS NEED FIXING") {
+                ForEach(list) { p in
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text(p.text).fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button(p.action, action: p.fix).buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Tailscale, kept open and connected by Echo.
+struct TailscaleCard: View {
+    @ObservedObject var keeper: TailscaleKeeper
+
+    var body: some View {
+        Card(title: "TAILSCALE") {
+            Row(title: "Status", value: keeper.state.text, good: keeper.state == .connected)
+            Toggle("Keep Tailscale open and connected", isOn: $keeper.enabled)
+            Text("Checked every 30 seconds. If Tailscale quits it's reopened, and if it disconnects it's reconnected - so your permanent address stays up.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let fix = keeper.lastFix {
+                Row(title: "Last stepped in", value: "\(fix.1), \(ago(fix.0))")
+            }
+            if keeper.state != .connected {
+                Button("Fix Now") { keeper.fix() }
+            }
+        }
+    }
+}
+
 struct PermissionsCard: View {
     @EnvironmentObject var brain: Brain
     private func open(_ pane: String) {
@@ -310,6 +395,7 @@ struct ConnectionPane: View {
                 }
             }
         }
+        TailscaleCard(keeper: brain.tailscale)
         Card(title: "DEVICES") {
             Row(title: "Live connections right now", value: "\(s.liveClients)")
             Row(title: "Browsers getting notifications", value: "\(s.pushSubscribers)")

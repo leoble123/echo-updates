@@ -14,6 +14,10 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 46, date: "21 October 2026", headline: "Tailscale kept on, and one-click fixes.", changes: [
+            "Echo keeps Tailscale open and connected: every 30 seconds it checks, reopens Tailscale if it quit and reconnects it if it dropped - your permanent address stays up. Switch it off under Connection → Tailscale. (The separate always-on script isn't needed any more.)",
+            "The Overview lists anything that's wrong right now - Tailscale down, the address unreachable, the Private API disconnected, Messages or the engine near their memory limit, the disk nearly full - each with the button that fixes it.",
+        ]),
         MacRelease(build: 45, date: "21 October 2026", headline: "A crash guard, and your devices at a glance.", changes: [
             "Crash guard: if Messages crashes right after Echo sends something, that message is marked, and if a phone or tablet tries it again it goes the plain way - no effect or reply, but it goes, and Messages stays up. Echo Guard tells you when it happens.",
             "Your Devices, on the Overview: each phone and tablet running Echo, which one is in use (that's the one that rings), and when the others were last used.",

@@ -43,6 +43,9 @@ final class Brain: ObservableObject {
         return latest > (installedBuild ?? 0)
     }
 
+    /// Tailscale, kept open and connected.
+    let tailscale = TailscaleKeeper()
+
     private var api: EngineAPI?
     private var timer: Timer?
     private var downSince: Date?
@@ -142,6 +145,20 @@ final class Brain: ObservableObject {
         note = "Restarting the engine… back in about 30 seconds."
         health = .down("Restarting…")
         Task.detached { EngineService.restart() }
+    }
+
+    /// Fix My Mac on the server: "address" (Tailscale Funnel back on), "messages" or "engine".
+    func repair(_ what: String) {
+        note = "Fixing…"
+        Task {
+            do {
+                let r = try await api?.call("POST", "/echo/repair", body: ["what": what], timeout: 60) as? [String: Any]
+                note = (r?["done"] as? [String])?.joined(separator: " · ") ?? "Done."
+            } catch {
+                note = "Couldn't fix it: \(error.localizedDescription)"
+            }
+            refresh()
+        }
     }
 
     func restartMessages() {
