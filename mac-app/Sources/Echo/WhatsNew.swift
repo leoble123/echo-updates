@@ -14,6 +14,9 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 44, date: "21 October 2026", headline: "Messages stops crashing on links.", changes: [
+            "Fixed: sending a link from Echo crashed Messages on macOS 27.2 - the Private API helper's link scan breaks there, and a retrying phone or tablet crashed it again each time. The scan is off now; links still send and preview.",
+        ]),
         MacRelease(build: 43, date: "21 October 2026", headline: "Your address stays the one you picked.", changes: [
             "Fixed: choosing My own address (your Tailscale one) could flip back to Cloudflare. The Tailscale check misread a working Tailscale as offline and switched to the backup tunnel; it now trusts this Mac's Tailscale connection itself.",
             "Picking an address method yourself is final - an earlier automatic switch can no longer undo it.",

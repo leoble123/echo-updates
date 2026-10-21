@@ -239,6 +239,9 @@ export class MessageRouter {
             tempGuid, message, attributedBody, method, chatGuid,
             effectId, subject, selectedMessageGuid, partIndex, ddScan
         } = ctx?.request?.body ?? {};
+        // Echo: the helper's link scan crashes Messages on macOS 27.2, and
+        // a client that keeps retrying crashes it again every time. Off.
+        ddScan = false;
 
         // Add to send cache
         Server().httpService.sendCache.add(tempGuid);
@@ -401,6 +404,7 @@ export class MessageRouter {
     static async sendMultipartMessage(ctx: RouterContext, _: Next) {
         let { parts, tempGuid, attributedBody, chatGuid, effectId, subject, selectedMessageGuid, partIndex, ddScan } =
             ctx?.request?.body ?? {};
+        ddScan = false; // Echo: crashes Messages on macOS 27.2 (see sendText).
 
         // Remove from cache
         if (isNotEmpty(tempGuid)) {
