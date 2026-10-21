@@ -1,4 +1,5 @@
 /* eslint-disable prefer-const */
+import { EchoCrashGuard } from "@server/services/echoCrashGuard";
 import { RouterContext } from "koa-router";
 import { Next } from "koa";
 import type { File } from "formidable";
@@ -242,6 +243,17 @@ export class MessageRouter {
         // Echo: the helper's link scan crashes Messages on macOS 27.2, and
         // a client that keeps retrying crashes it again every time. Off.
         ddScan = false;
+        // Echo: a message that crashed Messages through the helper last
+        // time goes the plain way now, without what only the helper can do.
+        if (method === "private-api" && EchoCrashGuard.avoidHelper(chatGuid, message)) {
+            method = "apple-script";
+            attributedBody = undefined;
+            effectId = undefined;
+            subject = undefined;
+            selectedMessageGuid = undefined;
+            partIndex = undefined;
+        }
+        if (method === "private-api") EchoCrashGuard.sending(chatGuid, message);
 
         // Add to send cache
         Server().httpService.sendCache.add(tempGuid);

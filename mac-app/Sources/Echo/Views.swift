@@ -237,6 +237,25 @@ struct OverviewPane: View {
             Row(title: "Engine up for", value: uptime(s.uptimeSec))
             Row(title: "Engine version", value: s.version.isEmpty ? "-" : "\(s.version) · build \(brain.installedBuild.map(String.init) ?? "?")")
         }
+        Card(title: "YOUR DEVICES") {
+            if s.devices.isEmpty {
+                Text("No phone or tablet has checked in yet. Echo 2.3 or newer does, every few minutes.")
+                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(s.devices.sorted { ($0.activeAt ?? .distantPast) > ($1.activeAt ?? .distantPast) }) { d in
+                    HStack {
+                        Image(systemName: d.tablet ? "ipad.landscape" : "iphone")
+                            .foregroundStyle(d.inUse ? Color.green : (d.around ? Color.primary : Color.secondary))
+                            .frame(width: 22)
+                        Text(d.name)
+                        Spacer()
+                        Text(d.label)
+                            .foregroundStyle(d.inUse ? Color.green : Color.secondary)
+                            .font(.callout)
+                    }
+                }
+            }
+        }
         Card(title: "ECHO GUARD") {
             if s.events.isEmpty {
                 Text("Nothing has needed fixing.").foregroundStyle(.secondary)

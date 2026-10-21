@@ -118,6 +118,8 @@ struct EngineStatus {
     var typingLastHeard: Date?
     var typingSent = 0
     var events: [(Date, String)] = []
+    /// Your Echo phones and tablets, as they last checked in.
+    var devices: [EchoDevice] = []
 
     init() {}
 
@@ -146,10 +148,40 @@ struct EngineStatus {
         typingHeard = int(t, "heard") ?? 0
         typingLastHeard = date(t?["lastHeardAt"])
         typingSent = int(t, "sent") ?? 0
+        devices = (j["devices"] as? [[String: Any]] ?? []).compactMap { d in
+            guard let id = d["id"] as? String else { return nil }
+            return EchoDevice(
+                id: id,
+                name: d["name"] as? String ?? "Android",
+                tablet: (d["kind"] as? String) == "tablet",
+                inUse: d["foreground"] as? Bool ?? false,
+                activeAt: date(d["activeAt"]),
+                seenAt: date(d["seenAt"])
+            )
+        }
         events = (j["events"] as? [[String: Any]] ?? []).compactMap { e in
             guard let at = date(e["at"]), let text = e["text"] as? String else { return nil }
             return (at, text)
         }
+    }
+}
+
+/// One of your phones or tablets running Echo.
+struct EchoDevice: Identifiable {
+    let id: String
+    let name: String
+    let tablet: Bool
+    let inUse: Bool
+    let activeAt: Date?
+    let seenAt: Date?
+
+    /// Checked in within the last twelve minutes (they check in every five).
+    var around: Bool { (seenAt.map { -$0.timeIntervalSinceNow } ?? .infinity) < 12 * 60 }
+
+    var label: String {
+        if inUse { return "In use - this one rings" }
+        if around { return "Last used " + (activeAt.map { ago($0) } ?? "-") }
+        return "Not heard from " + (seenAt.map { ago($0) } ?? "-")
     }
 }
 

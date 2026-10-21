@@ -1,3 +1,4 @@
+import { EchoCrashGuard } from "@server/services/echoCrashGuard";
 import { app } from "electron";
 import fs from "fs";
 import http from "http";
@@ -150,6 +151,8 @@ export class EchoGuard extends Loggable {
     }
 
     async tick() {
+        // A Messages crash right after a send: blame that message (see EchoCrashGuard).
+        EchoCrashGuard.scan();
         if (!this.enabled || Server().isRestarting || Server().isStopping) return;
 
         const procs = await this.processes();

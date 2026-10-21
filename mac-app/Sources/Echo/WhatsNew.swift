@@ -14,6 +14,10 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 45, date: "21 October 2026", headline: "A crash guard, and your devices at a glance.", changes: [
+            "Crash guard: if Messages crashes right after Echo sends something, that message is marked, and if a phone or tablet tries it again it goes the plain way - no effect or reply, but it goes, and Messages stays up. Echo Guard tells you when it happens.",
+            "Your Devices, on the Overview: each phone and tablet running Echo, which one is in use (that's the one that rings), and when the others were last used.",
+        ]),
         MacRelease(build: 44, date: "21 October 2026", headline: "Messages stops crashing on links.", changes: [
             "Fixed: sending a link from Echo crashed Messages on macOS 27.2 - the Private API helper's link scan breaks there, and a retrying phone or tablet crashed it again each time. The scan is off now; links still send and preview.",
         ]),

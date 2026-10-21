@@ -102,6 +102,8 @@ export class EchoRouter {
                 proxy: String(Server().repo.getConfig("proxy_service") ?? ""),
                 macos: os.release(),
                 events: EchoGuard.events.slice(-15),
+                // Your phones and tablets, and which one's in use.
+                devices: EchoDevices.list(),
                 // Every way in, so a phone can fall back when one dies, and how the public one is doing.
                 routes: EchoAddress.get().routes(),
                 addressCheck: EchoAddress.get().status
