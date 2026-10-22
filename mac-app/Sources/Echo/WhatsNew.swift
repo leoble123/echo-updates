@@ -14,6 +14,10 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
+        MacRelease(build: 49, date: "22 October 2026", headline: "Groundwork: a message never sent twice.", changes: [
+            "New, and off for now: Echo Server can remember every message it sends, even across a restart, so a phone or tablet trying one again after a dropped connection gets the first result back instead of sending it twice. Until it's switched on, sending works exactly as before.",
+            "When it's on, a message whose fate is unclear (the engine restarted mid-send) waits rather than going again blind - unless your phone has checked this Mac's history and shown it never arrived.",
+        ]),
         MacRelease(build: 46, date: "21 October 2026", headline: "Tailscale kept on, and one-click fixes.", changes: [
             "Echo keeps Tailscale open and connected: every 30 seconds it checks, reopens Tailscale if it quit and reconnects it if it dropped - your permanent address stays up. Switch it off under Connection → Tailscale. (The separate always-on script isn't needed any more.)",
             "The Overview lists anything that's wrong right now - Tailscale down, the address unreachable, the Private API disconnected, Messages or the engine near their memory limit, the disk nearly full - each with the button that fixes it.",
