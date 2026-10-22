@@ -1,5 +1,5 @@
 import { Server } from "@server";
-import { Claim, IdempotencyLedger } from "./ledger";
+import { Claim, IdempotencyLedger, RetryAuth, retryAuthProblem } from "./ledger";
 
 /**
  * Durable send deduplication, behind the echo_idempotency setting (off by
@@ -45,12 +45,39 @@ export class EchoIdempotency {
         }, 60 * 60_000);
     }
 
-    /** Null means "no ledger here - send as usual". */
-    static async claim(key: string, chatGuid: string): Promise<Claim | null> {
+    /** The newest sent-from-me message ROWID in a conversation on this Mac; null if unreadable. */
+    private static async newestFromMe(chatGuid: string): Promise<number | null> {
+        try {
+            const rows = await Server().iMessageRepo.db.query(
+                "SELECT MAX(m.ROWID) AS r FROM message m " +
+                    "JOIN chat_message_join j ON j.message_id = m.ROWID " +
+                    "JOIN chat c ON c.ROWID = j.chat_id " +
+                    "WHERE c.guid = ? AND m.is_from_me = 1",
+                [chatGuid]
+            );
+            return Number(rows?.[0]?.r ?? 0);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Null means "no ledger here - send as usual". [auth] is the phone's
+     * history confirmation on a Try Again, checked against this Mac's own
+     * chat database before it can release an outcome-unknown send early.
+     */
+    static async claim(key: string, chatGuid: string, auth?: RetryAuth | null): Promise<Claim | null> {
         if (!key || !EchoIdempotency.enabled()) return null;
         if (!(await EchoIdempotency.open())) return null;
+        const verify = auth
+            ? async (row: any) => {
+                  const problem = retryAuthProblem(row, auth, await EchoIdempotency.newestFromMe(row.chat_guid));
+                  Server().log(`Echo idempotency: retry of ${key} ${problem ? `held (${problem})` : "released by history check"}`);
+                  return problem == null;
+              }
+            : undefined;
         try {
-            return await EchoIdempotency.ledger.claim(key, chatGuid);
+            return await EchoIdempotency.ledger.claim(key, chatGuid, verify);
         } catch (ex: any) {
             Server().log(`Echo idempotency claim failed, sending without it: ${ex?.message ?? ex}`, "warn");
             return null;

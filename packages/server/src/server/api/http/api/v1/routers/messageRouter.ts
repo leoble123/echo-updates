@@ -242,7 +242,11 @@ export class MessageRouter {
      * claim to settle, or null to send as usual (setting off, or no tempGuid).
      */
     private static async claimSend(ctx: RouterContext, tempGuid: string, chatGuid: string) {
-        const claim = await EchoIdempotency.claim(isNotEmpty(tempGuid) ? String(tempGuid) : null, chatGuid);
+        const claim = await EchoIdempotency.claim(
+            isNotEmpty(tempGuid) ? String(tempGuid) : null,
+            chatGuid,
+            ctx?.request?.body?.echoRetry ?? null
+        );
         if (!claim || claim.kind === "new") return { claim, replayed: false };
         if (claim.kind === "done") {
             new Success(ctx, { message: "Message sent!", data: claim.result }).send();

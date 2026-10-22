@@ -6,8 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+    COVER_MARGIN_MS,
     IdempotencyLedger,
     KEEP_MS,
+    retryAuthProblem,
+    type RetryAuth,
     STALE_MS,
     TABLE,
     UNKNOWN_HOLD_MS,
@@ -170,4 +173,124 @@ test("schema creation is additive and repeatable", async () => {
     await ledger.ensureSchema();
     await ledger.ensureSchema();
     assert.deepEqual(db.prepare(`SELECT * FROM "config"`).all().length, 1);
+});
+
+// --- history-confirmed retry ------------------------------------------------
+
+/** A Mac whose chat database says the newest sent-from-me ROWID is [newest] (null: unreadable). */
+function mac(newest: number | null) {
+    return { newest };
+}
+
+function verifier(ledger: IdempotencyLedger, m: { newest: number | null }, auth: RetryAuth | null) {
+    return async (row: any) => {
+        await new Promise((r) => setImmediate(r)); // the Mac lookup is real I/O: let others interleave
+        return retryAuthProblem(row, auth, m.newest) == null;
+    };
+}
+
+/** An outcome-unknown send in chat-A, created at the ledger's current time. */
+async function unknownSend(ledger: IdempotencyLedger, key = "echo-local-G") {
+    const c = await ledger.claim(key, "chat-A");
+    await ledger.unknown(key, (c as any).token);
+}
+
+function confirmation(over: Partial<RetryAuth> = {}): RetryAuth {
+    return { key: "echo-local-G", chatGuid: "chat-A", result: "not_delivered", seenThroughRowId: 500, coveredFrom: 0, ...over };
+}
+
+test("confirmed not delivered: a verified retry goes now, inside the hold", async () => {
+    const { ledger, clock } = await ledgerAt();
+    await unknownSend(ledger);
+    clock.now += 60_000; // well inside the 20 minutes
+    const c = await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), confirmation()));
+    assert.equal(c.kind, "new");
+});
+
+test("confirmed delivered: a confirmation that doesn't say 'not delivered' releases nothing", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    const auth = confirmation({ result: "delivered" });
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), auth))).kind, "unknown");
+});
+
+test("unavailable history: no confirmation, or the Mac can't read its own, keeps the hold", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), null))).kind, "unknown");
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(null), confirmation()))).kind, "unknown");
+    assert.equal(retryAuthProblem({ status: "unknown", key: "echo-local-G", chat_guid: "chat-A", created_at: 1e9 }, confirmation(), null),
+        "the Mac's history couldn't be read");
+});
+
+test("stale confirmation: something sent from me since the phone looked keeps the hold", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    // The original landing late would be exactly this: a newer from-me row.
+    const c = await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(501), confirmation({ seenThroughRowId: 500 })));
+    assert.equal(c.kind, "unknown");
+});
+
+test("incomplete history: a read that doesn't reach back before the attempt keeps the hold", async () => {
+    const { ledger, clock } = await ledgerAt();
+    await unknownSend(ledger); // created at clock.now
+    const attempt = clock.now;
+    const short = confirmation({ coveredFrom: attempt - COVER_MARGIN_MS + 1 });
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), short))).kind, "unknown");
+    const enough = confirmation({ coveredFrom: attempt - COVER_MARGIN_MS });
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), enough))).kind, "new");
+});
+
+test("bound to the send token and conversation, not the text", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    const otherSend = confirmation({ key: "echo-local-OTHER" });
+    const otherChat = confirmation({ chatGuid: "chat-B" });
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), otherSend))).kind, "unknown");
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), otherChat))).kind, "unknown");
+    assert.equal(retryAuthProblem({ status: "unknown", key: "k", chat_guid: "c", created_at: 1e9 }, { key: "k", chatGuid: "c", result: "not_delivered", seenThroughRowId: "x" as any, coveredFrom: 0 }, 0),
+        "confirmation is malformed");
+});
+
+test("concurrent verified retries: exactly one sends", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    const results = await Promise.all(
+        [1, 2, 3, 4, 5, 6].map(() => ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), confirmation())))
+    );
+    assert.equal(results.filter((r) => r.kind === "new").length, 1);
+    assert.ok(results.every((r) => r.kind === "new" || r.kind === "busy"), JSON.stringify(results));
+});
+
+test("a confirmation never overrides a send that went, or one in flight", async () => {
+    const { ledger } = await ledgerAt();
+    await send(ledger, "echo-local-G", "chat-A", { n: 0 });
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), confirmation()))).kind, "done");
+    await ledger.claim("echo-local-F", "chat-A");
+    const auth = confirmation({ key: "echo-local-F" });
+    assert.equal((await ledger.claim("echo-local-F", "chat-A", verifier(ledger, mac(500), auth))).kind, "busy");
+});
+
+test("server restart: a send cut off mid-way is held, then released by a fresh confirmation", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "echo-idem-"));
+    const file = path.join(dir, "config.db");
+    try {
+        const a = await ledgerAt(file);
+        await a.ledger.claim("echo-local-G", "chat-A"); // the server dies before settling
+        a.db.close();
+
+        const b = await ledgerAt(file);
+        b.clock.now = a.clock.now + STALE_MS + 1;
+        assert.equal(await b.ledger.reconcile(), 1);
+        assert.equal((await b.ledger.claim("echo-local-G", "chat-A")).kind, "unknown");
+        // A stale read is still refused after the restart...
+        assert.equal((await b.ledger.claim("echo-local-G", "chat-A", verifier(b.ledger, mac(9), confirmation({ seenThroughRowId: 8 })))).kind, "unknown");
+        // ...and a current one releases it, once.
+        const ok = verifier(b.ledger, mac(8), confirmation({ seenThroughRowId: 8 }));
+        assert.equal((await b.ledger.claim("echo-local-G", "chat-A", ok)).kind, "new");
+        assert.equal((await b.ledger.claim("echo-local-G", "chat-A", ok)).kind, "busy");
+        b.db.close();
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });

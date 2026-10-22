@@ -20,6 +20,24 @@ export type Claim =
     // The key was used for a different conversation.
     | { kind: "conflict" };
 
+/**
+ * A phone's word that it read the Mac's history for this conversation and
+ * the exact send (by token) never landed. Lets a person's Try Again past the
+ * hold on an outcome-unknown send - only when the Mac can confirm it's
+ * still true (see [retryAuthProblem]).
+ */
+export type RetryAuth = {
+    /** The send token (tempGuid) this confirmation is for. */
+    key: string;
+    chatGuid: string;
+    /** What the phone found. Only "not_delivered" authorizes anything. */
+    result: string;
+    /** The newest message ROWID in the history the phone read (0 if the chat was empty). */
+    seenThroughRowId: number;
+    /** The oldest message date (Mac clock, ms) that history reached; 0 means the whole chat. */
+    coveredFrom: number;
+};
+
 export const TABLE = "echo_idempotency";
 
 /** How long a finished send is remembered. */
@@ -34,6 +52,33 @@ export const STALE_MS = 2 * 60_000;
  * Try Again - which checks the chat's history first - sends it again.
  */
 export const UNKNOWN_HOLD_MS = 20 * 60_000;
+
+/** The phone's history has to reach this far before the original attempt. */
+export const COVER_MARGIN_MS = 2 * 60_000;
+
+/**
+ * Why [auth] can't release this outcome-unknown send, or null if it can.
+ * [macNewestFromMe] is the newest sent-from-me ROWID in the conversation on
+ * the Mac now, or null when that couldn't be read - which never authorizes.
+ */
+export function retryAuthProblem(row: any, auth: RetryAuth | null | undefined, macNewestFromMe: number | null): string | null {
+    if (!auth || typeof auth !== "object") return "no history confirmation";
+    if (row?.status !== "unknown") return "only an outcome-unknown send can be released";
+    if (auth.key !== row.key) return "confirmation is for a different send";
+    if (auth.chatGuid !== row.chat_guid) return "confirmation is for a different conversation";
+    if (auth.result !== "not_delivered") return "history didn't confirm it was missing";
+    const seen = Number(auth.seenThroughRowId);
+    const from = Number(auth.coveredFrom);
+    if (!Number.isFinite(seen) || seen < 0 || !Number.isFinite(from) || from < 0) return "confirmation is malformed";
+    // The history read has to reach back before the attempt began, or the
+    // send could be sitting just past what the phone looked at.
+    if (from > Number(row.created_at) - COVER_MARGIN_MS) return "history didn't reach back far enough";
+    if (macNewestFromMe == null) return "the Mac's history couldn't be read";
+    // Anything sent from here since the phone looked could be this very
+    // message landing late: the confirmation is stale.
+    if (macNewestFromMe > seen) return "history has changed since it was checked";
+    return null;
+}
 
 /**
  * A durable record of sends by their client token (tempGuid), so a resend
@@ -71,7 +116,12 @@ export class IdempotencyLedger {
         return rows?.[0] ?? null;
     }
 
-    async claim(key: string, chatGuid: string): Promise<Claim> {
+    /**
+     * [verify] is asked only about an outcome-unknown send still in its hold:
+     * true releases it to this request. The release is conditional on the
+     * row being unchanged, so of several verified retries only one sends.
+     */
+    async claim(key: string, chatGuid: string, verify?: (row: any) => Promise<boolean>): Promise<Claim> {
         const now = this.now();
         const token = crypto.randomBytes(16).toString("hex");
         // Only one request can insert the row; whoever's token is on it owns the send.
@@ -87,7 +137,8 @@ export class IdempotencyLedger {
 
         const retake =
             row.status === "failed" ||
-            (row.status === "unknown" && now - row.updated_at >= UNKNOWN_HOLD_MS);
+            (row.status === "unknown" &&
+                (now - row.updated_at >= UNKNOWN_HOLD_MS || (verify != null && (await verify(row)))));
         if (retake) {
             // Conditional on what was read, so two resends can't both take it.
             await this.db.query(
