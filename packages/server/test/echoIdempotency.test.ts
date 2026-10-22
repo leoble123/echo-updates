@@ -11,7 +11,6 @@ import {
     KEEP_MS,
     retryAuthProblem,
     type RetryAuth,
-    STALE_MS,
     TABLE,
     UNKNOWN_HOLD_MS,
     type SqlRunner
@@ -136,20 +135,24 @@ test("survives a restart: a finished send is still replayed from disk", async ()
 });
 
 test("after a crash mid-send, reconcile holds it as unknown instead of resending", async () => {
-    const { ledger, clock } = await ledgerAt();
+    const { ledger } = await ledgerAt();
     await ledger.claim("cut", "chat-A"); // never settled: the server died here
-    await ledger.claim("fresh", "chat-A");
-    clock.now += STALE_MS + 1;
-    await ledger.claim("fresh", "chat-A"); // still busy, not touched below
-    assert.equal(await ledger.reconcile(), 2);
+    await send(ledger, "went", "chat-A", { n: 0 }); // finished before the crash: left alone
+    assert.equal(await ledger.reconcile(), 1);
     assert.equal((await ledger.claim("cut", "chat-A")).kind, "unknown");
+    assert.equal((await ledger.claim("went", "chat-A")).kind, "done");
 });
 
-test("reconcile leaves a send that just started alone", async () => {
-    const { ledger } = await ledgerAt();
+test("reconcile holds even a send cut off seconds after it began (regression)", async () => {
+    // It used to skip sends younger than two minutes - so a quick restart
+    // mid-send left them in progress, and every resend was refused as busy.
+    const { ledger, clock } = await ledgerAt();
     await ledger.claim("k", "chat-A");
-    assert.equal(await ledger.reconcile(), 0);
-    assert.equal((await ledger.claim("k", "chat-A")).kind, "busy");
+    clock.now += 1000;
+    assert.equal(await ledger.reconcile(), 1);
+    assert.equal((await ledger.claim("k", "chat-A")).kind, "unknown");
+    clock.now += UNKNOWN_HOLD_MS;
+    assert.equal((await ledger.claim("k", "chat-A")).kind, "new");
 });
 
 test("sweep forgets sends older than a day, and keeps the rest", async () => {
@@ -280,7 +283,7 @@ test("server restart: a send cut off mid-way is held, then released by a fresh c
         a.db.close();
 
         const b = await ledgerAt(file);
-        b.clock.now = a.clock.now + STALE_MS + 1;
+        b.clock.now = a.clock.now + 5_000; // a quick restart
         assert.equal(await b.ledger.reconcile(), 1);
         assert.equal((await b.ledger.claim("echo-local-G", "chat-A")).kind, "unknown");
         // A stale read is still refused after the restart...

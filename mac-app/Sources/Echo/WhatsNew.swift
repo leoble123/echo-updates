@@ -14,7 +14,7 @@ struct MacRelease: Identifiable {
 /// commit that ships it.
 enum WhatsNew {
     static let releases: [MacRelease] = [
-        MacRelease(build: 49, date: "22 October 2026", headline: "Groundwork: a message never sent twice.", changes: [
+        MacRelease(build: 51, date: "22 October 2026", headline: "Groundwork: a message never sent twice.", changes: [
             "New, and off for now: Echo Server can remember every message it sends, even across a restart, so a phone or tablet trying one again after a dropped connection gets the first result back instead of sending it twice. Until it's switched on, sending works exactly as before.",
             "When it's on, a message whose fate is unclear (the engine restarted mid-send) waits rather than going again blind - unless your phone has checked this Mac's history and shown it never arrived.",
         ]),

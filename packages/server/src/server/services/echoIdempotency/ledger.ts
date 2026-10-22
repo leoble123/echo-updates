@@ -43,9 +43,6 @@ export const TABLE = "echo_idempotency";
 /** How long a finished send is remembered. */
 export const KEEP_MS = 24 * 60 * 60_000;
 
-/** A send still marked in progress this long after it began was cut off. */
-export const STALE_MS = 2 * 60_000;
-
 /**
  * How long an outcome-unknown send blocks a resend under the same key. Longer
  * than the phone keeps retrying on its own (15 minutes), so only a person's
@@ -190,20 +187,17 @@ export class IdempotencyLedger {
     }
 
     /**
-     * After a restart: a send still in progress was cut off mid-way, so
-     * whether it went is unknown. Returns how many were marked.
+     * After a restart: every send still in progress was cut off mid-way - its
+     * process is gone - so whether it went is unknown. However recently it
+     * began: a send cut off seconds into it is the usual case. Only call this
+     * before this process claims anything (EchoIdempotency runs it when the
+     * ledger opens, and every claim waits for that). Returns how many.
      */
     async reconcile(): Promise<number> {
-        const now = this.now();
-        const cutoff = now - STALE_MS;
-        const stuck = await this.db.query(
-            `SELECT COUNT(*) AS n FROM "${TABLE}" WHERE "status" = 'in_progress' AND "updated_at" < ?`,
-            [cutoff]
-        );
-        await this.db.query(
-            `UPDATE "${TABLE}" SET "status" = 'unknown', "updated_at" = ? WHERE "status" = 'in_progress' AND "updated_at" < ?`,
-            [now, cutoff]
-        );
+        const stuck = await this.db.query(`SELECT COUNT(*) AS n FROM "${TABLE}" WHERE "status" = 'in_progress'`);
+        await this.db.query(`UPDATE "${TABLE}" SET "status" = 'unknown', "updated_at" = ? WHERE "status" = 'in_progress'`, [
+            this.now()
+        ]);
         return Number(stuck?.[0]?.n ?? 0);
     }
 }
