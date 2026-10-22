@@ -1,0 +1,21 @@
+{
+  "android": {
+    "version": "2.4.3",
+    "code": 210,
+    "notes": "Try Again can't send a message twice: Echo checks your Mac's history first, and if the message already went, the bubble just turns sent. If Echo can't tell (Mac out of reach, or the chat too busy to check), it says so and waits instead of guessing. Also reconnects as soon as you switch networks, and backs off more gently when your Mac is away.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/android/Echo-2.4.3.apk",
+    "sha256": "08812d83d48ef3ce7a48b46f58eee9a9187a0b3b31964162ca8f04191ee8feaa",
+    "size": 18630211
+  },
+  "windows": {
+    "version": "0.6.0",
+    "notes": "Nightly encrypted backups of your Mac's messages to this PC.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/windows/Echo-0.6.0.exe",
+    "sha256": "e28fe4f6983b28e33212c2e3ab3da5b3d8855d9bbb0e803750ede221a9519719",
+    "size": 1593856
+  },
+  "web": {
+    "version": "1.11.0",
+    "url": "https://leoble123.github.io/echo-updates/web/"
+  }
+}

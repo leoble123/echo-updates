@@ -1,0 +1,9 @@
+# Echo
+
+Finished builds of Echo. The apps check `latest.json` and update themselves;
+these links are for a first install.
+
+- **Android 2.4.3**: [Echo-2.4.3.apk](https://raw.githubusercontent.com/leoble123/echo-updates/main/android/Echo-2.4.3.apk)
+- **Windows 0.6.0**: [Echo-0.6.0.exe](https://raw.githubusercontent.com/leoble123/echo-updates/main/windows/Echo-0.6.0.exe)
+- **Echo Web**: https://leoble123.github.io/echo-updates/web/
+- **Echo Server** (Mac): `curl -fsSL https://raw.githubusercontent.com/leoble123/echo-updates/main/mac/echo-server.sh | bash`
