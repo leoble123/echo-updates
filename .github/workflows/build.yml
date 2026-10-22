@@ -23,7 +23,8 @@ jobs:
           node-version: "22.12"
       - name: Test Echo's own server code
         working-directory: packages/server
-        run: node --experimental-strip-types --test test/*.test.ts
+        # node:sqlite (the idempotency ledger tests) is behind a flag before Node 22.13.
+        run: node --experimental-sqlite --experimental-strip-types --test test/*.test.ts
       - uses: actions/setup-node@v4
         with:
           node-version: "20.11"
