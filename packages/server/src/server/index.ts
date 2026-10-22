@@ -79,6 +79,7 @@ import { EchoCodes } from "./services/echoCodes";
 import { EchoHandoff } from "./services/echoHandoff";
 import { EchoSearch } from "./services/echoSearch";
 import { EchoBackup } from "./services/echoBackup";
+import { EchoIdempotency } from "./services/echoIdempotency";
 import { applyEchoDefaults, underLaunchd } from "./services/echoGuard/defaults";
 
 const findProcess = require("find-process");
@@ -685,6 +686,7 @@ class BlueBubblesServer extends EventEmitter {
         EchoHandoff.get().start();
         EchoSearch.get().start();
         EchoBackup.get().start();
+        EchoIdempotency.start();
 
         // Perform any post-setup tasks/checks
         await this.postChecks();

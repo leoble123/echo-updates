@@ -58,6 +58,20 @@ export class BadRequest extends HTTPError {
     }
 }
 
+export class Conflict extends HTTPError {
+    constructor(response?: ResponseParams) {
+        super({
+            status: 409,
+            message: response?.message ?? "That request conflicts with one already made",
+            error: {
+                type: ErrorTypes.VALIDATION_ERROR,
+                message: response?.error ?? ResponseMessages.BAD_REQUEST
+            },
+            data: response?.data
+        });
+    }
+}
+
 export class NotFound extends HTTPError {
     constructor(response?: ResponseParams) {
         super({

@@ -1,5 +1,6 @@
 /* eslint-disable prefer-const */
 import { EchoCrashGuard } from "@server/services/echoCrashGuard";
+import { EchoIdempotency } from "@server/services/echoIdempotency";
 import { RouterContext } from "koa-router";
 import { Next } from "koa";
 import type { File } from "formidable";
@@ -13,7 +14,7 @@ import { MessagePromiseRejection } from "@server/managers/outgoingMessageManager
 import { MessageSerializer } from "@server/api/serializers/MessageSerializer";
 import { arrayHasOne } from "@server/utils/CollectionUtils";
 import { FileStream, Success } from "../responses/success";
-import { BadRequest, IMessageError, NotFound } from "../responses/errors";
+import { BadRequest, Conflict, IMessageError, NotFound } from "../responses/errors";
 import { parseWithQuery } from "../utils";
 import { isMinVentura } from "@server/env";
 
@@ -235,6 +236,37 @@ export class MessageRouter {
         return new Success(ctx, { data, message: "Successfully fetched messages!", metadata }).send();
     }
 
+    /**
+     * Echo: with echo_idempotency on, a send already made under this tempGuid
+     * answers with its first result instead of sending again. Returns the
+     * claim to settle, or null to send as usual (setting off, or no tempGuid).
+     */
+    private static async claimSend(ctx: RouterContext, tempGuid: string, chatGuid: string) {
+        const claim = await EchoIdempotency.claim(isNotEmpty(tempGuid) ? String(tempGuid) : null, chatGuid);
+        if (!claim || claim.kind === "new") return { claim, replayed: false };
+        if (claim.kind === "done") {
+            new Success(ctx, { message: "Message sent!", data: claim.result }).send();
+            return { claim, replayed: true };
+        }
+        throw new Conflict({
+            message: "Message Send Error",
+            error:
+                claim.kind === "busy"
+                    ? `This message is already being sent (Temp GUID: ${tempGuid})`
+                    : claim.kind === "unknown"
+                      ? `An earlier try of this message may have gone through; not sending it again yet (Temp GUID: ${tempGuid})`
+                      : `That Temp GUID was used for another conversation (Temp GUID: ${tempGuid})`
+        });
+    }
+
+    /** What a failed send says about whether it went: an error from Messages means it didn't. */
+    private static failedOutcome(ex: any): "failed" | "unknown" {
+        if (ex instanceof Message) return "failed";
+        if (ex instanceof MessagePromiseRejection && (ex?.msg?.error ?? 0) !== 0) return "failed";
+        if (ex instanceof IMessageError && ((ex?.response as any)?.data?.error ?? 0) !== 0) return "failed";
+        return "unknown";
+    }
+
     static async sendText(ctx: RouterContext, _: Next) {
         let {
             tempGuid, message, attributedBody, method, chatGuid,
@@ -243,6 +275,8 @@ export class MessageRouter {
         // Echo: the helper's link scan crashes Messages on macOS 27.2, and
         // a client that keeps retrying crashes it again every time. Off.
         ddScan = false;
+        const { claim, replayed } = await MessageRouter.claimSend(ctx, tempGuid, chatGuid);
+        if (replayed) return;
         // Echo: a message that crashed Messages through the helper last
         // time goes the plain way now, without what only the helper can do.
         if (method === "private-api" && EchoCrashGuard.avoidHelper(chatGuid, message)) {
@@ -300,11 +334,13 @@ export class MessageRouter {
                     data
                 });
             } else {
+                await EchoIdempotency.settle(tempGuid, claim, "done", data);
                 return new Success(ctx, { message: "Message sent!", data }).send();
             }
         } catch (ex: any) {
             // Remove from cache
             Server().httpService.sendCache.remove(tempGuid);
+            await EchoIdempotency.settle(tempGuid, claim, MessageRouter.failedOutcome(ex));
 
             if (ex instanceof Message) {
                 throw new IMessageError({
@@ -417,6 +453,8 @@ export class MessageRouter {
         let { parts, tempGuid, attributedBody, chatGuid, effectId, subject, selectedMessageGuid, partIndex, ddScan } =
             ctx?.request?.body ?? {};
         ddScan = false; // Echo: crashes Messages on macOS 27.2 (see sendText).
+        const { claim, replayed } = await MessageRouter.claimSend(ctx, tempGuid, chatGuid);
+        if (replayed) return;
 
         // Remove from cache
         if (isNotEmpty(tempGuid)) {
@@ -463,11 +501,13 @@ export class MessageRouter {
                     data
                 });
             } else {
+                await EchoIdempotency.settle(tempGuid, claim, "done", data);
                 return new Success(ctx, { message: "Message sent!", data }).send();
             }
         } catch (ex: any) {
             // Remove from cache
             Server().httpService.sendCache.remove(tempGuid);
+            await EchoIdempotency.settle(tempGuid, claim, MessageRouter.failedOutcome(ex));
 
             if (ex instanceof Message) {
                 throw new IMessageError({
