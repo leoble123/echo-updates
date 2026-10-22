@@ -9,7 +9,9 @@ import {
     COVER_MARGIN_MS,
     IdempotencyLedger,
     KEEP_MS,
+    readMacView,
     retryAuthProblem,
+    type MacView,
     type RetryAuth,
     TABLE,
     UNKNOWN_HOLD_MS,
@@ -181,14 +183,14 @@ test("schema creation is additive and repeatable", async () => {
 // --- history-confirmed retry ------------------------------------------------
 
 /** A Mac whose chat database says the newest sent-from-me ROWID is [newest] (null: unreadable). */
-function mac(newest: number | null) {
-    return { newest };
+function mac(newest: number | null, sinceAttempt: number[] = []): MacView | null {
+    return newest == null ? null : { newestFromMe: newest, sinceAttempt };
 }
 
-function verifier(ledger: IdempotencyLedger, m: { newest: number | null }, auth: RetryAuth | null) {
+function verifier(ledger: IdempotencyLedger, m: MacView | null, auth: RetryAuth | null) {
     return async (row: any) => {
         await new Promise((r) => setImmediate(r)); // the Mac lookup is real I/O: let others interleave
-        return retryAuthProblem(row, auth, m.newest) == null;
+        return retryAuthProblem(row, auth, m) == null;
     };
 }
 
@@ -199,7 +201,7 @@ async function unknownSend(ledger: IdempotencyLedger, key = "echo-local-G") {
 }
 
 function confirmation(over: Partial<RetryAuth> = {}): RetryAuth {
-    return { key: "echo-local-G", chatGuid: "chat-A", result: "not_delivered", seenThroughRowId: 500, coveredFrom: 0, ...over };
+    return { key: "echo-local-G", chatGuid: "chat-A", result: "not_delivered", seenThroughRowId: 500, coveredFrom: 0, seenFromMe: [], ...over };
 }
 
 test("confirmed not delivered: a verified retry goes now, inside the hold", async () => {
@@ -251,7 +253,7 @@ test("bound to the send token and conversation, not the text", async () => {
     const otherChat = confirmation({ chatGuid: "chat-B" });
     assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), otherSend))).kind, "unknown");
     assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), otherChat))).kind, "unknown");
-    assert.equal(retryAuthProblem({ status: "unknown", key: "k", chat_guid: "c", created_at: 1e9 }, { key: "k", chatGuid: "c", result: "not_delivered", seenThroughRowId: "x" as any, coveredFrom: 0 }, 0),
+    assert.equal(retryAuthProblem({ status: "unknown", key: "k", chat_guid: "c", created_at: 1e9 }, { key: "k", chatGuid: "c", result: "not_delivered", seenThroughRowId: "x" as any, coveredFrom: 0, seenFromMe: [] }, 0),
         "confirmation is malformed");
 });
 
@@ -296,4 +298,91 @@ test("server restart: a send cut off mid-way is held, then released by a fresh c
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+// --- what a real Mac showed: a sent message isn't filed to its chat at once ---
+
+test("a sent message not yet filed to any chat, unseen by the phone, keeps the hold", async () => {
+    // On a real Mac a message sent offline appeared in chat.db at once, but
+    // with no chat - so the phone's history (read by chat) couldn't see it.
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    const m = mac(500, [501]); // 501: from me, since the attempt, not filed yet
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, m, confirmation({ seenThroughRowId: 500 })))).kind, "unknown");
+});
+
+test("filed later under a lower ROWID than the phone's newest, still unseen: hold", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    // 498 was unfiled when the phone looked; a reply (500) came in after it.
+    const m = mac(498, [498]);
+    const auth = confirmation({ seenThroughRowId: 500, seenFromMe: [] });
+    assert.equal(retryAuthProblem({ status: "unknown", key: "echo-local-G", chat_guid: "chat-A", created_at: 1e12 }, auth, m),
+        "a message sent since the attempt wasn't in the history checked");
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, m, auth))).kind, "unknown");
+});
+
+test("every message sent since the attempt was checked by the phone: released", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    const auth = confirmation({ seenThroughRowId: 500, seenFromMe: [480, 498, 499] });
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(499, [498, 499]), auth))).kind, "new");
+});
+
+test("a confirmation without the list of messages checked releases nothing", async () => {
+    const { ledger } = await ledgerAt();
+    await unknownSend(ledger);
+    const auth = confirmation();
+    delete (auth as any).seenFromMe;
+    assert.equal((await ledger.claim("echo-local-G", "chat-A", verifier(ledger, mac(500), auth))).kind, "unknown");
+});
+
+/** A chat.db with the tables and columns readMacView reads, dates as Messages stores them. */
+function chatDb() {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`CREATE TABLE message (ROWID INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, is_from_me INTEGER, date INTEGER);
+             CREATE TABLE chat (ROWID INTEGER PRIMARY KEY AUTOINCREMENT, guid TEXT);
+             CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+             INSERT INTO chat (guid) VALUES ('any;+;chat515870701682263854'), ('any;-;lgreen114@icloud.com');`);
+    const add = (ms: number, fromMe: number, chat: number | null) => {
+        // Nanoseconds since 2001, the way Messages stores it - past 2^53, so built as a BigInt.
+        const ns = (BigInt(ms) - 978307200000n) * 1000000n + 123456n;
+        const r = db.prepare("INSERT INTO message (text, is_from_me, date) VALUES ('x', ?, ?)").run(fromMe, ns);
+        if (chat != null) db.prepare("INSERT INTO chat_message_join VALUES (?, ?)").run(chat, r.lastInsertRowid);
+        return Number(r.lastInsertRowid);
+    };
+    return { db, add };
+}
+
+test("readMacView on a chat.db: this chat's and unfiled sends since the attempt, nothing else", async () => {
+    const { db, add } = chatDb();
+    const t = 1_792_652_827_000; // October 2026
+    const before = add(t - 600_000, 1, 1); // sent in this chat, before the window
+    const mine = add(t + 1_000, 1, 1); // sent in this chat, in the window
+    const elsewhere = add(t + 2_000, 1, 2); // sent in another chat
+    const incoming = add(t + 3_000, 0, 1); // received
+    const unfiled = add(t + 4_000, 1, null); // sent, not filed to a chat yet
+    const v = await readMacView(runner(db), "any;+;chat515870701682263854", t);
+    assert.deepEqual(v.sinceAttempt, [mine, unfiled]);
+    assert.equal(v.newestFromMe, mine);
+    assert.ok(![before, elsewhere, incoming].some((id) => v.sinceAttempt.includes(id)));
+    // The window edge is exact to the millisecond, despite nanosecond dates.
+    const edge = await readMacView(runner(db), "any;+;chat515870701682263854", t + 1_000);
+    assert.deepEqual(edge.sinceAttempt, [mine, unfiled]);
+    const past = await readMacView(runner(db), "any;+;chat515870701682263854", t + 1_001);
+    assert.deepEqual(past.sinceAttempt, [unfiled]);
+});
+
+test("readMacView: once the unfiled send is filed to the chat, it still counts", async () => {
+    const { db, add } = chatDb();
+    const t = 1_792_652_827_000;
+    const id = add(t + 1_000, 1, null);
+    assert.deepEqual((await readMacView(runner(db), "any;+;chat515870701682263854", t)).sinceAttempt, [id]);
+    db.prepare("INSERT INTO chat_message_join VALUES (1, ?)").run(id);
+    const v = await readMacView(runner(db), "any;+;chat515870701682263854", t);
+    assert.deepEqual(v.sinceAttempt, [id]);
+    assert.equal(v.newestFromMe, id);
+    // Filed to a different chat, it no longer concerns this one.
+    const other = add(t + 2_000, 1, 2);
+    assert.ok(!(await readMacView(runner(db), "any;+;chat515870701682263854", t)).sinceAttempt.includes(other));
 });

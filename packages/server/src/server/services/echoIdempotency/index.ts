@@ -1,5 +1,5 @@
 import { Server } from "@server";
-import { Claim, IdempotencyLedger, RetryAuth, retryAuthProblem } from "./ledger";
+import { Claim, COVER_MARGIN_MS, IdempotencyLedger, MacView, readMacView, RetryAuth, retryAuthProblem } from "./ledger";
 
 /**
  * Durable send deduplication, behind the echo_idempotency setting (off by
@@ -45,17 +45,10 @@ export class EchoIdempotency {
         }, 60 * 60_000);
     }
 
-    /** The newest sent-from-me message ROWID in a conversation on this Mac; null if unreadable. */
-    private static async newestFromMe(chatGuid: string): Promise<number | null> {
+    /** [readMacView] on this Mac's chat database; null if it couldn't be read. */
+    private static async macView(chatGuid: string, sinceMs: number): Promise<MacView | null> {
         try {
-            const rows = await Server().iMessageRepo.db.query(
-                "SELECT MAX(m.ROWID) AS r FROM message m " +
-                    "JOIN chat_message_join j ON j.message_id = m.ROWID " +
-                    "JOIN chat c ON c.ROWID = j.chat_id " +
-                    "WHERE c.guid = ? AND m.is_from_me = 1",
-                [chatGuid]
-            );
-            return Number(rows?.[0]?.r ?? 0);
+            return await readMacView(Server().iMessageRepo.db, chatGuid, sinceMs);
         } catch {
             return null;
         }
@@ -71,7 +64,8 @@ export class EchoIdempotency {
         if (!(await EchoIdempotency.open())) return null;
         const verify = auth
             ? async (row: any) => {
-                  const problem = retryAuthProblem(row, auth, await EchoIdempotency.newestFromMe(row.chat_guid));
+                  const mac = await EchoIdempotency.macView(row.chat_guid, Number(row.created_at) - COVER_MARGIN_MS);
+                  const problem = retryAuthProblem(row, auth, mac);
                   Server().log(`Echo idempotency: retry of ${key} ${problem ? `held (${problem})` : "released by history check"}`);
                   return problem == null;
               }

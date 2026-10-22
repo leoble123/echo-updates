@@ -36,6 +36,22 @@ export type RetryAuth = {
     seenThroughRowId: number;
     /** The oldest message date (Mac clock, ms) that history reached; 0 means the whole chat. */
     coveredFrom: number;
+    /** The ROWID of every sent-from-me message in the history read - each one checked and not this send. */
+    seenFromMe: number[];
+};
+
+/** What this Mac's own chat database says, read when a confirmation is checked. */
+export type MacView = {
+    /** The newest sent-from-me ROWID in the conversation (0 if none). */
+    newestFromMe: number;
+    /**
+     * Every sent-from-me ROWID since the attempt began, in the conversation or
+     * not filed to any conversation yet. Messages writes a sent message at
+     * once but can file it to its chat later (seen on a real Mac), so an
+     * unfiled one may be this very send - and the phone's history, read by
+     * conversation, can't have seen it.
+     */
+    sinceAttempt: number[];
 };
 
 export const TABLE = "echo_idempotency";
@@ -54,11 +70,40 @@ export const UNKNOWN_HOLD_MS = 20 * 60_000;
 export const COVER_MARGIN_MS = 2 * 60_000;
 
 /**
- * Why [auth] can't release this outcome-unknown send, or null if it can.
- * [macNewestFromMe] is the newest sent-from-me ROWID in the conversation on
- * the Mac now, or null when that couldn't be read - which never authorizes.
+ * Reads [MacView] from Messages' chat.db for [chatGuid], for sends since
+ * [sinceMs] (Mac clock, ms). Read-only.
  */
-export function retryAuthProblem(row: any, auth: RetryAuth | null | undefined, macNewestFromMe: number | null): string | null {
+export async function readMacView(chatDb: SqlRunner, chatGuid: string, sinceMs: number): Promise<MacView> {
+    const newest = await chatDb.query(
+        "SELECT MAX(m.ROWID) AS r FROM message m " +
+            "JOIN chat_message_join j ON j.message_id = m.ROWID " +
+            "JOIN chat c ON c.ROWID = j.chat_id " +
+            "WHERE c.guid = ? AND m.is_from_me = 1",
+        [chatGuid]
+    );
+    // message.date is nanoseconds since 2001; compared in ms so no number
+    // past 2^53 crosses into JavaScript.
+    const since = await chatDb.query(
+        "SELECT m.ROWID AS r FROM message m " +
+            "WHERE m.is_from_me = 1 AND m.date / 1000000 + 978307200000 >= ? AND (" +
+            "EXISTS (SELECT 1 FROM chat_message_join j JOIN chat c ON c.ROWID = j.chat_id " +
+            "WHERE j.message_id = m.ROWID AND c.guid = ?) OR " +
+            "NOT EXISTS (SELECT 1 FROM chat_message_join j JOIN chat c ON c.ROWID = j.chat_id " +
+            "WHERE j.message_id = m.ROWID)) ORDER BY m.ROWID",
+        [sinceMs, chatGuid]
+    );
+    return {
+        newestFromMe: Number(newest?.[0]?.r ?? 0),
+        sinceAttempt: (since ?? []).map((x: any) => Number(x.r))
+    };
+}
+
+/**
+ * Why [auth] can't release this outcome-unknown send, or null if it can.
+ * [mac] is read from this Mac's chat database just now, or null when that
+ * couldn't be read - which never authorizes.
+ */
+export function retryAuthProblem(row: any, auth: RetryAuth | null | undefined, mac: MacView | null): string | null {
     if (!auth || typeof auth !== "object") return "no history confirmation";
     if (row?.status !== "unknown") return "only an outcome-unknown send can be released";
     if (auth.key !== row.key) return "confirmation is for a different send";
@@ -67,13 +112,22 @@ export function retryAuthProblem(row: any, auth: RetryAuth | null | undefined, m
     const seen = Number(auth.seenThroughRowId);
     const from = Number(auth.coveredFrom);
     if (!Number.isFinite(seen) || seen < 0 || !Number.isFinite(from) || from < 0) return "confirmation is malformed";
+    if (!Array.isArray(auth.seenFromMe) || !auth.seenFromMe.every((n) => Number.isFinite(Number(n)))) {
+        return "confirmation is malformed";
+    }
     // The history read has to reach back before the attempt began, or the
     // send could be sitting just past what the phone looked at.
     if (from > Number(row.created_at) - COVER_MARGIN_MS) return "history didn't reach back far enough";
-    if (macNewestFromMe == null) return "the Mac's history couldn't be read";
+    if (mac == null) return "the Mac's history couldn't be read";
     // Anything sent from here since the phone looked could be this very
     // message landing late: the confirmation is stale.
-    if (macNewestFromMe > seen) return "history has changed since it was checked";
+    if (mac.newestFromMe > seen) return "history has changed since it was checked";
+    // Every message sent since the attempt - filed to this chat or not filed
+    // yet - has to be one the phone looked at and ruled out.
+    const checked = new Set(auth.seenFromMe.map(Number));
+    if (mac.sinceAttempt.some((id) => !checked.has(Number(id)))) {
+        return "a message sent since the attempt wasn't in the history checked";
+    }
     return null;
 }
 
