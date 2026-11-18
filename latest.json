@@ -1,0 +1,21 @@
+{
+  "android": {
+    "version": "2.5.1",
+    "code": 213,
+    "notes": "iPhone voice messages play now: Echo opens Apple's .caf files and plays the sound as it is, nothing re-encoded. Plus everything from 2.5: tablet split view, livelier liquid glass, smoother motion and a steadier connection to your Mac.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/android/Echo-2.5.1.apk",
+    "sha256": "82c9ecb8c1c2a4bf22df9efe861d5a6ee846d6c2e0ddb0d3e1576574deb8a2e1",
+    "size": 18686355
+  },
+  "windows": {
+    "version": "0.6.0",
+    "notes": "Nightly encrypted backups of your Mac's messages to this PC.",
+    "url": "https://raw.githubusercontent.com/leoble123/echo-updates/main/windows/Echo-0.6.0.exe",
+    "sha256": "e28fe4f6983b28e33212c2e3ab3da5b3d8855d9bbb0e803750ede221a9519719",
+    "size": 1593856
+  },
+  "web": {
+    "version": "1.11.0",
+    "url": "https://leoble123.github.io/echo-updates/web/"
+  }
+}
